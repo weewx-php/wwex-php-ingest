@@ -1,125 +1,126 @@
 # weewx-php-ingest
 
-Hardware collection for a remote [weewx-php](../weewx-php/README.md) installation.
-Runs on a Raspberry Pi or another computer in the station owner's LAN.
-
-```text
-Davis / other hardware -> WeeWX drivers -> local spool -> HTTPS -> weewx-php
-                         Raspberry Pi                           web host
-```
-
-This is a separate Python project. The web host runs PHP; it needs no Python,
-USB access or connection into the home network.
-
-## Implemented
-
-- Use original WeeWX drivers, including third-party extensions.
-- Run independent driver instances concurrently, including the same driver twice.
-- Identify every instance as a separate station in the remote live journal.
-- Persist readings locally and retry delivery after network or server outages.
-- Configure the send interval in seconds independently of archive intervals.
-- Run without generating reports, images or Cheetah templates.
-
-## Status
-
-The v1 Python collector is implemented with real WeeWX 5.5.0 engine processes,
-SQLite WAL spools with `synchronous=FULL`, independent station identities,
-HTTPS batching, fair retries and process watchdogs. The native PHP receiver is
-implemented in the separate weewx-php project.
-
-- [Implemented receiver contract](docs/native-ingest-v1.md)
-- [Request JSON Schema](schemas/weewx-v1.schema.json)
-- [PHP security review](../weewx-php/docs/reviews/native-ingest-security.md)
-
-Version 1 sends original LOOP events in batches to `POST /ingest/weewx.php`.
-Every driver instance has a persistent station UUID. Only per-event `stored`
-or `duplicate` acknowledgements release the local spool entry. Hardware
-archive records and accumulator rollups require a later protocol version.
-
-[Architecture and implementation sequence](docs/architecture.md) documents the
-metadriver review, process isolation, transport, replay, hardware history and
-optional accumulator rollups. PHP receiver changes belong in the separate
-weewx-php project.
+Collect weather station readings with WeeWX drivers and send them to a remote
+weewx-php server over HTTPS. Each station has its own worker and persistent SQLite
+queue. Network failures are retried without changing event IDs.
 
 ## Install
 
-Python 3.11 or newer. Linux/Raspberry Pi is the deployment target; the tests also
-run on Windows. Install device-specific libraries and permissions required by
-your WeeWX driver.
+Raspberry Pi OS Bookworm or newer, Debian 12+, or Ubuntu 24.04+. Python 3.11+
+and systemd are required. In a checkout of this repository, run:
 
 ```sh
-python3 -m venv .venv
-.venv/bin/python -m pip install .
+sudo bash install.sh --source "$PWD"
 ```
 
-On Windows, use `.venv\Scripts\python.exe` and `.venv\Scripts\weewx-php-ingest.exe`.
+The installer installs dependencies, all bundled WeeWX drivers and the systemd
+service, generates a random token and collector ID, then opens the setup assistant.
 
-## Configure and start
-
-1. Enable native ingest on the PHP host and provision the collector:
-
-   ```sh
-   php bin/weewx-php collector add "Raspberry"
-   ```
-
-2. Copy [examples/collector.toml](examples/collector.toml) and the required WeeWX
-   `.conf` files into your configuration directory. Set the returned collector
-   ID, HTTPS endpoint and an absolute writable `state_dir`. File paths are
-   relative to `collector.toml`; WeeWX roots are relative to its `.conf`.
-
-3. Put the returned token alone in `collector.token`, with mode `0600` on Linux.
-   Alternatively set `token_env` to an environment variable's name and remove
-   `token_file`. The example ID and endpoint are placeholders.
-
-4. Validate, create the station identities, and start:
-
-   ```sh
-   weewx-php-ingest --config /etc/weewx-php-ingest/collector.toml check
-   weewx-php-ingest --config /etc/weewx-php-ingest/collector.toml init
-   weewx-php-ingest --config /etc/weewx-php-ingest/collector.toml run
-   ```
-
-5. After the first upload, admit each station on the PHP host:
-
-   ```sh
-   php bin/weewx-php collector stations <collector_id>
-   php bin/weewx-php collector adopt <collector_id> <station_id> "Garden"
-   ```
-
-   Pending stations retain their readings and retry after at least 60 seconds.
-   Configure archive sender assignment and schedule PHP's tick as described in
-   the [receiver contract](docs/native-ingest-v1.md).
-
-## Operations
+The assistant asks for the destination domain, scans connected USB/serial devices,
+offers the bundled hardware drivers and their connection settings, and tests a real
+reading. It supports multiple stations and starts the service when setup finishes.
+Reopen it at any time:
 
 ```sh
-weewx-php-ingest --config /etc/weewx-php-ingest/collector.toml status
-weewx-php-ingest --config /etc/weewx-php-ingest/collector.toml upload-once
-weewx-php-ingest --config /etc/weewx-php-ingest/collector.toml retry garden
+sudo weewx-php-ingest configure
 ```
 
-`status` prints station UUIDs, queue sizes, oldest unconfirmed times, full states,
-quarantine reasons, last collection/delivery, worker PID/restarts and retry times.
-It does not open hardware or read the token. `upload-once` sends one due batch and
-respects backoff; stop the service first because only one uploader may run.
-`retry` requeues quarantined events without changing their IDs or data.
+The first upload appears in the destination's existing station list. Adopt the
+station there. No token copying or collector registration is required. The PHP host
+must have ingest enabled and the matching native discovery support.
 
-Change `label` freely. Preserve `[stations.<key>]` keys and spool files across
-renames, USB changes and upgrades. Changing the driver module or collector ID for
-an existing spool is refused. Stop the collector before copying the complete
-state directory, configurations and token to a replacement computer.
+This repository is currently private. Fetching it requires GitHub access, including
+for subsequent updates. For SSH access, install with
+`--repository git@github.com:weewx-php/wwex-php-ingest.git`; the account running the
+installer must be able to clone that URL.
 
-See [deployment and operation](docs/operations.md) for systemd, extensions,
-capacity planning, failure handling and verification commands.
+For a public repository, installation directly from GitHub is one command:
 
-## Verification and scope
+```sh
+curl -fsSL https://raw.githubusercontent.com/weewx-php/wwex-php-ingest/main/install.sh | sudo bash
+```
 
-Tests cover real Simulator processes, callbacks, process failure/silence,
-quota pause/resume, durable retries, TLS and the real PHP receiver. Physical
-Davis/USB reconnect and arbitrary third-party hardware remain untested.
-The collector cannot recover LOOP data produced while collection was stopped.
-Hardware history and rollups require a later receiver protocol. WeeWX's reporting
-dependencies remain installed, but report/template services are not started.
+## Configure
 
-- [Implementation and test notes](docs/implementation.md)
-- [Collector security review](docs/reviews/collector-security.md)
+All settings live in `/etc/weewx-php-ingest/weewx.conf`:
+
+```ini
+[Station]
+    station_type = Vantage
+    latitude = 52.52
+    longitude = 13.405
+    altitude = 40, meter
+
+[Vantage]
+    driver = weewx.drivers.vantage
+    type = serial
+    port = /dev/serial/by-id/YOUR_CONSOLE
+    baudrate = 19200
+
+[Ingest]
+    collector_id = YOUR_COLLECTOR_ID
+    url = https://weather.example.org/ingest/weewx.php
+    token = YOUR_TOKEN
+    state_dir = /var/lib/weewx-php-ingest
+    station_key = station
+    send_interval = 10
+```
+
+Driver sections use the usual WeeWX syntax and options. The assistant uses the
+configuration editors supplied by the bundled drivers.
+See the [single-station example](examples/weewx.conf) and
+[multiple-station example](examples/weewx-multi.conf). Multiple instances of the
+same driver are supported. The configuration has mode `0600` and belongs to
+`weewx-ingest`.
+
+After editing, validate and restart:
+
+```sh
+sudo -u weewx-ingest weewx-php-ingest check
+sudo systemctl restart weewx-php-ingest
+```
+
+Alternatively, adopt the station with the PHP CLI:
+
+```sh
+php bin/weewx-php ingest list
+php bin/weewx-php ingest adopt <sender> "Garden"
+```
+
+## Update
+
+```sh
+sudo weewx-php-ingest update
+```
+
+Updates the collector and bundled drivers together from `main`. The new version is
+built and checked before switching the service. Configuration, station IDs and
+queued readings are preserved. A failed service start restores the previous version.
+
+## Drivers
+
+`vendor/weewx/` contains the official WeeWX source release, including every bundled
+hardware driver and the matching engine. The installer uses this source directly.
+The **Sync WeeWX drivers** GitHub Action checks daily for a newer stable release,
+verifies its checksum, runs the tests and commits successful updates to `main`.
+Stations receive those updates with the update command above.
+
+Third-party drivers are installed separately; their files and requirements can be
+kept outside the managed release. See [operation and extensions](docs/operations.md)
+and [upstream license and provenance](THIRD_PARTY.md).
+
+## Status
+
+```sh
+sudo -u weewx-ingest weewx-php-ingest status
+sudo journalctl -u weewx-php-ingest -f
+```
+
+The collector sends original LOOP observations; hardware archive recovery and
+rollups require a later protocol. Physical Davis/USB hardware has not been tested.
+
+- [Receiver contract](docs/native-ingest-v1.md)
+- [Implementation and tests](docs/implementation.md)
+- [Security review](docs/reviews/collector-security.md)
+
+The receiver integration is tracked in [weewx-php-adoption.patch](integrations/weewx-php-adoption.patch).

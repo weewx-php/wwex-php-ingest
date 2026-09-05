@@ -2,18 +2,21 @@
 
 Implemented on 2026-09-05 against the mirrored native v1 contract and upstream
 WeeWX 5.5.0. Collector code, tests and deployment files are confined to this
-project; the PHP receiver project was used as an integration-test dependency.
+project. The matching PHP receiver change enables native discovery through its existing Adopt UI/CLI.
 
 | Module | Responsibility |
 |---|---|
-| `config.py` | Typed/bounded TOML settings, HTTPS endpoint validation and token-file/environment loading. |
+| `config.py` | Unified ConfigObj weewx.conf, isolated station sections, bounded settings, HTTPS and token validation. |
 | `runtime.py` | Real StdEngine per worker; isolated configuration, upstream extension startup, post-callback journaling and LOOP lifecycle. |
 | `spool.py` | Per-station UUID/collector binding, immutable event payloads, FULL/WAL commits, quotas and persistent retry/quarantine state. |
 | `protocol.py` | v1 field/value validation, exact timestamp/unit integer encoding and identity-based ACK validation. |
 | `transport.py` | Verified direct HTTPS, bounded response body, timeouts, no redirects and one credential header. |
 | `uploader.py` | Fair live/backlog batches, persisted learned limits, station/global backoff and explicit event acknowledgements. |
 | `supervisor.py`, `locking.py` | Worker/uploader subprocesses, silence watchdogs, independent restart backoff and exclusive OS locks. |
-| `cli.py` | Check/init/status/run/upload-once/retry commands and secret-free collector diagnostics. |
+| `configure.py`, `update.py`, `install.sh` | Guided setup, local credentials, managed Linux installation and collector/driver updates. |
+| `hardware.py` | USB/serial inventory, upstream driver catalog and bounded real-driver probes. |
+| `scripts/sync_weewx.py` | Verified official source vendoring and matching WeeWX dependency pin. |
+| `cli.py` | Configure/scan/update/check/init/status/run/upload-once/retry commands and secret-free collector diagnostics. |
 
 Station identity is stored in each `state_dir/stations/<key>.sqlite3`. The module
 and collector binding cannot be changed while retaining that spool. Labels and
@@ -35,7 +38,7 @@ an existing receiver receipt may still acknowledge them as duplicates.
 
 ## Verification
 
-Local environment: Windows, Python 3.14.3, PyPI WeeWX 5.5.0 and the separate
+Local environment: Windows, Python 3.14.3, bundled WeeWX 5.5.0 and the separate
 weewx-php project using PHP/SQLite3. Test coverage includes:
 
 - Two actual Simulator processes, independent IDs, source configuration and PIDs.
@@ -52,10 +55,15 @@ weewx-php project using PHP/SQLite3. Test coverage includes:
 - The complete supervisor, two worker processes and separate uploader over HTTPS.
 - The actual PHP endpoint behind a test TLS terminator: pending/adopt/store,
   lost ACK/duplicate, exact journal values and independent station receipts.
-- Wheel/source builds, Ruff checks and dependency vulnerability audit.
+- Guided Simulator setup, generated credentials, domain normalization, USB/serial inventory,
+  hardware timeout, first upload and cancelled-setup preservation.
+- Standard and nested weewx.conf settings, inline token rotation and credential permissions.
+- Linux installer: install/update/no-op, preserved configuration, station ID and queued event,
+  and rejected update with invalid configuration.
+- Vendored source and installed driver checksums, wheel/source builds, Ruff and dependency audit.
 
 The workflow in `.github/workflows/test.yml` defines Windows/Linux and Python
-3.11/3.14 checks; it has not been executed on GitHub from this workspace.
+3.11/3.14 checks and a Linux installer smoke test.
 
 ## Remaining acceptance boundaries
 

@@ -49,6 +49,6 @@ def test_token_env_is_explicit_and_config_typo_fails(make_config, monkeypatch):
 @pytest.mark.parametrize("key", ["collector", "uploader"])
 def test_reserved_process_names_cannot_be_station_keys(make_config, key):
     cfg = make_config(count=1)
-    cfg.path.write_text(cfg.path.read_text().replace("stations.s0", f"stations.{key}"))
+    cfg.path.write_text(cfg.path.read_text().replace("[[s0]]", f"[[{key}]]"))
     with pytest.raises(ConfigError, match="invalid station key"):
         load_config(cfg.path)

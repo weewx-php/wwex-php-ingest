@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 from weewx.drivers.simulator import Simulator
 
+from weewx_php_ingest.config import read_token
 from weewx_php_ingest.protocol import event_from_loop
 from weewx_php_ingest.supervisor import open_spools
 from weewx_php_ingest.transport import HTTPSClient
@@ -36,7 +37,7 @@ def test_real_php_admission_lost_ack_and_station_identity(make_config, tls_serve
 
     def cli(*args):
         result = subprocess.run(
-            [php, str(root / "bin/weewx-php"), "--config", str(php_config), "collector", *args],
+            [php, str(root / "bin/weewx-php"), "--config", str(php_config), "ingest", *args],
             capture_output=True,
             text=True,
             timeout=20,
@@ -44,12 +45,8 @@ def test_real_php_admission_lost_ack_and_station_identity(make_config, tls_serve
         assert result.returncode == 0, "PHP collector CLI failed"
         return result.stdout
 
-    provisioned = dict(line.split(": ", 1) for line in cli("add", "Integration").splitlines())
     cfg = make_config(endpoint=tls_server["url"])
-    cfg.token_file.write_text(provisioned["token"])
-    cfg = dataclasses.replace(
-        cfg, collector_id=provisioned["collector_id"], ca_file=tls_server["ca"]
-    )
+    cfg = dataclasses.replace(cfg, ca_file=tls_server["ca"])
     spools = open_spools(cfg)
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
@@ -104,8 +101,10 @@ def test_real_php_admission_lost_ack_and_station_identity(make_config, tls_serve
         uploader = Uploader(cfg, spools, HTTPSClient(cfg))
         assert uploader.tick(now=now) == 0
         assert all(s.status()["rejections"] == {"pending": 1} for s in spools)
-        for spool in spools:
-            cli("adopt", cfg.collector_id, spool.station_id, spool.station.key)
+        senders = [line.split()[0] for line in cli("list").splitlines()]
+        assert len(senders) == 2
+        for sender in senders:
+            cli("adopt", sender)
         tls_server["behaviors"].append("lost")
         assert uploader.tick(now=now + 61) == 0
         assert all(s.status()["events"] == 1 for s in spools)
@@ -132,4 +131,4 @@ def test_real_php_admission_lost_ack_and_station_identity(make_config, tls_serve
         server_log.close()
         for spool in spools:
             spool.close()
-    assert provisioned["token"] not in (tmp_path / "php-server.log").read_text()
+    assert read_token(cfg) not in (tmp_path / "php-server.log").read_text()

@@ -23,25 +23,23 @@ def make_config(tmp_path):
         token.write_text("a" * 64)
         token.chmod(0o600)
         content = [
-            "[collector]",
-            f'id = "{uuid.uuid4()}"',
-            f'endpoint = "{endpoint}"',
+            "[Ingest]",
+            f'collector_id = "{uuid.uuid4()}"',
+            f'url = "{endpoint}"',
             'token_file = "collector.token"',
             'state_dir = "state"',
             "send_interval = 0.1",
             "timeout = 2",
             "shutdown_timeout = 2",
+            "[Stations]",
         ]
         for i in range(count):
-            path = tmp_path / f"station{i}.conf"
-            path.write_text(
-                "[Station]\nstation_type=Simulator\nlatitude=0\nlongitude=0\n"
-                "altitude=0,meter\n[Simulator]\ndriver=weewx.drivers.simulator\n"
-                "loop_interval=0.1\nobservations=outTemp,rain,windSpeed,windDir\n"
-            )
             content += [
-                f"[stations.s{i}]",
-                f'config = "station{i}.conf"',
+                f"[[s{i}]]",
+                "[[[Station]]]\nstation_type=Simulator\nlatitude=0\nlongitude=0\n"
+                "altitude=0,meter\n[[[Simulator]]]\ndriver=weewx.drivers.simulator\n"
+                "loop_interval=0.1\nobservations=outTemp,rain,windSpeed,windDir",
+                "[[[Ingest]]]",
                 "min_free_bytes=0",
                 "startup_timeout=10",
                 "silence_timeout=2",
@@ -49,8 +47,9 @@ def make_config(tmp_path):
                 "lifecycle_delay=1",
             ]
             content += [f"{key} = {json.dumps(value)}" for key, value in overrides.items()]
-        config_path = tmp_path / "collector.toml"
+        config_path = tmp_path / "weewx.conf"
         config_path.write_text("\n".join(content))
+        config_path.chmod(0o600)
         return load_config(config_path)
 
     return make

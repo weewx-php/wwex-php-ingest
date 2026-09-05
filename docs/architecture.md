@@ -53,7 +53,7 @@ network C   -> WeeWX engine C -> spool C --/                    |
 
 One installation can run the same driver module several times, including two
 Davis consoles. Each instance keeps the driver's usual section names in its
-own configuration. No primary hardware station is required by the collector.
+own section of a shared `weewx.conf`. No primary hardware station is required by the collector.
 Archives may still select a primary sender through the existing PHP settings.
 
 ## What the inspected code establishes
@@ -180,9 +180,9 @@ The authoritative originals live in weewx-php at `docs/native-ingest.md` and
 - Endpoint: `POST /ingest/weewx.php`, HTTPS, UTF-8 `application/json`, no rewriting.
 - Authentication: exactly one of `Authorization: Bearer <token>` or
   `X-WeeWX-Token: <token>`; never a URL/query credential.
-- Provisioning: PHP CLI `collector add <name>` supplies collector UUID/token.
-  First delivery discovers station UUIDs as pending; `collector adopt`
-  admits each station. Pending is not a durable weather-data acknowledgement.
+- Setup: the collector generates its UUID/token locally. First delivery discovers
+  stations as pending; the existing Adopt UI or `ingest adopt` admits each station.
+  Pending is not a durable weather-data acknowledgement.
 - Envelope: integer `version=1`, `collector_id`, `packets` array. Every event
   carries `station_id`, `event_id`, `driver_module`, `kind=loop`, integer
   `dateTime`, `usUnits` and numeric/null `data`.

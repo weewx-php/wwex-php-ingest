@@ -1,0 +1,99 @@
+#
+# Configuration file used to package WeeWX.
+#
+# To install directly from this directory,
+#   cd ~
+#   python -m venv weewx-venv
+#   source weewx-venv/bin/activate
+#   cd to-the-weewx-git-repository
+#   python -m pip install .
+#
+[project]
+name = "weewx"
+version = "5.5.0"
+description = "The WeeWX weather software system."
+authors = [
+    {name = "Tom Keffer", email = "tkeffer@gmail.com"},
+    {name = "Matthew Wall", email = "mwall.weewx@gmail.com"}
+]
+license = "GPL-3.0-only"
+readme = "README.md"
+requires-python = ">=3.7"
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: End Users/Desktop",
+    "Intended Audience :: Science/Research",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: Unix",
+    "Operating System :: MacOS",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Physics"
+]
+dependencies = [
+    # versions of configobj earlier than 5.0.9 suffer from CVE-2023-26112, ReDoS attack,
+    # but we don't care because we don't use validation.
+    "configobj>=5.0",
+    # This is the renamed "Cheetah" package:
+    "CT3>=3.1",
+    "Pillow>=5.2",
+    "ephem>=4.1",
+    "PyMySQL>=1.0",
+    "pyserial>=3.4",
+    "pyusb>=1.0.2",
+]
+
+[project.urls]
+Homepage = "https://weewx.com"
+Repository = "https://github.com/weewx/weewx"
+Documentation = "https://weewx.com/docs"
+Issues = "https://github.com/weewx/weewx/issues"
+Wiki = "https://github.com/weewx/weewx/wiki"
+Support = "https://groups.google.com/g/weewx-user"
+
+[dependency-groups]
+dev = [
+    "cryptography",
+    "zensical",
+    "poetry",
+    "pytest",
+]
+
+[project.scripts]
+weectl = "weectl:main"
+weewxd = "weewxd:main"
+
+[tool.poetry]
+packages = [
+    { include = "weecfg", from = "src" },
+    { include = "weectllib", from = "src" },
+    { include = "weedb", from = "src" },
+    { include = "weeimport", from = "src" },
+    { include = "weeplot", from = "src" },
+    { include = "weeutil", from = "src" },
+    { include = "weewx", from = "src" },
+    { include = "weewx_data", from = "src" },
+    { include = "weectl.py", from = "src" },
+    { include = "weewxd.py", from = "src" },
+]
+
+include = [
+    { path = "LICENSE.txt", format = "sdist" },
+    { path = "README.md", format = "sdist" },
+]
+
+exclude = [
+    "./src/**/tests/**/*",
+]
+
+[build-system]
+requires = ["poetry-core>=2.0.0"]
+build-backend = "poetry.core.masonry.api"
+

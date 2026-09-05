@@ -9,7 +9,7 @@ from pathlib import Path
 
 from configobj import ConfigObj, ConfigObjError
 
-from .config import ConfigError
+from .config import ConfigError, read_weewx
 from .protocol import MODULE, ProtocolError, encode, event_from_loop
 from .spool import Spool, SpoolFull, spool_path
 
@@ -27,7 +27,15 @@ log = logging.getLogger(__name__)
 
 def driver_config(station):
     try:
-        cfg = ConfigObj(str(station.config), encoding="utf-8", file_error=True)
+        cfg = read_weewx(station.config)
+        if station.section:
+            roots = {key: cfg[key] for key in ("WEEWX_ROOT", "USER_ROOT") if key in cfg}
+            cfg = ConfigObj(
+                {**roots, **cfg["Stations"][station.section].dict()}, interpolation=False
+            )
+        # Never pass ingest credentials or another instance's configuration to a driver.
+        cfg.pop("Ingest", None)
+        cfg.pop("Stations", None)
         module = cfg[cfg["Station"]["station_type"]]["driver"]
         if not isinstance(module, str) or not MODULE.fullmatch(module) or len(module) > 160:
             raise ValueError

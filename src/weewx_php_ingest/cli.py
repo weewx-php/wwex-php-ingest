@@ -19,10 +19,18 @@ from .uploader import Uploader
 
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="weewx-php-ingest")
-    parser.add_argument("--config", required=True)
+    parser.add_argument("--config", default="/etc/weewx-php-ingest/weewx.conf")
     commands = parser.add_subparsers(dest="command", required=True)
-    for command in ("check", "init", "status", "run", "upload-once", "_upload"):
+    for command in ("check", "init", "status", "run", "upload-once", "_upload", "update"):
         commands.add_parser(command)
+    for command in ("configure", "_initialize"):
+        commands.add_parser(command).add_argument(
+            "--state-dir", default="/var/lib/weewx-php-ingest"
+        )
+    probe = commands.add_parser("_probe")
+    probe.add_argument("station")
+    probe.add_argument("destination")
+    commands.add_parser("scan")
     commands.add_parser("_worker").add_argument("station")
     commands.add_parser("retry").add_argument("station")
     args = parser.parse_args(argv)
@@ -37,6 +45,30 @@ def main(argv=None):
         force=True,
     )
     try:
+        if args.command == "update":
+            from .update import update
+
+            return update()
+        if args.command == "scan":
+            from .hardware import scan
+
+            devices, warnings = scan()
+            print(json.dumps({"devices": devices, "warnings": warnings}, indent=2))
+            return 0
+        if args.command == "_probe":
+            from .hardware import run_probe
+
+            return run_probe(args.config, args.station, args.destination)
+        if args.command == "_initialize":
+            from .configure import initialize
+
+            initialize(args.config, args.state_dir)
+            return 0
+        if args.command == "configure":
+            from .configure import configure
+
+            configure(args.config, args.state_dir)
+            return 0
         config = load_config(args.config)
         if args.command == "check":
             for station in config.stations:

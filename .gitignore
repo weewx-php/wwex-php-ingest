@@ -9,8 +9,11 @@ dist/
 state/
 *.sqlite3*
 *.token
-collector.toml
-!examples/collector.toml
+weewx.conf
+!examples/weewx.conf
+!vendor/**/weewx.conf
+vendor/weewx/build/
+vendor/weewx/dist/
 .coverage
 htmlcov/
 .test-tmp/

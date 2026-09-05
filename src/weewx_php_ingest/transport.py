@@ -41,7 +41,7 @@ class HTTPSClient:
         self.context.minimum_version = ssl.TLSVersion.TLSv1_2
 
     def send(self, body):
-        token = read_token(self.config)  # Token-file rotation takes effect on the next request.
+        token = read_token(self.config)  # Token rotation takes effect on the next request.
         authorization = f"Bearer {token}" if self.config.token_header == "Authorization" else token
         connection = http.client.HTTPSConnection(
             self.url.hostname, self.url.port, timeout=self.config.timeout, context=self.context
@@ -54,7 +54,7 @@ class HTTPSClient:
                 {
                     "Content-Type": "application/json; charset=utf-8",
                     "Accept": "application/json",
-                    "User-Agent": "weewx-php-ingest/0.1.0",
+                    "User-Agent": "weewx-php-ingest/0.2.0",
                     self.config.token_header: authorization,
                 },
             )

@@ -1,4 +1,4 @@
-<!-- Mirrored from D:/Git/weewx-php/docs/native-ingest.md on 2026-09-05. The PHP project is authoritative; resync when the contract changes. -->
+<!-- Mirrored from D:/Git/weewx-php/docs/native-ingest.md on 2026-09-05. -->
 
 # Native WeeWX ingest: version 1
 
@@ -30,26 +30,26 @@ tick, preferably every minute. `tick_mode = auto` can also trigger it after
 FastCGI finishes a successful response; other runtimes still need the scheduled
 tick. No archive work runs before the collector's HTTP acknowledgement.
 
-Provision a collector locally:
+The collector installer generates a collector UUID and a 256-bit random token.
+Run its guided `weewx-php-ingest configure` assistant and enter this server's domain.
+No collector registration or token copying is required.
+
+The first valid upload discovers the collector and its station IDs. Only the token's
+SHA-256 digest is stored in `live.sdb`; the collector retains the token in its
+protected `weewx.conf`. Existing UUID/token bindings cannot be replaced by discovery.
+
+New stations appear as pending in the normal administration station list. Use the
+existing Adopt button, or:
 
 ```sh
-php bin/weewx-php collector add "Raspberry"
+php bin/weewx-php ingest list
+php bin/weewx-php ingest adopt <sender> "Davis"
 ```
 
-This returns a generated `collector_id`, a 256-bit random token and the URL.
-The token is displayed once; only its SHA-256 digest is stored in `live.sdb`.
-Configure the returned ID and token on that collector. No secret is supplied
-on a command line or URL to the receiver.
-
-The first valid upload discovers each `station_id` in the collector's namespace.
-Its response is `pending`, with a generated stable `sender`. It has not written
-weather data to the journal and the collector must keep its local events.
-
-```sh
-php bin/weewx-php collector list
-php bin/weewx-php collector stations <collector_id>
-php bin/weewx-php collector adopt <collector_id> <station_id> "Davis"
-```
+The response before adoption is `pending`, with a stable `sender`. No weather data
+has reached the journal, so the collector keeps its events for retry. Discovery
+uses the configured pending limit and a global cap of 100 collectors and 2,000
+native stations. Known tokens retain per-collector request limits before body reads.
 
 The next delivery, including retries of the original events, can be stored.
 Adopted stations are available to configuration and normal archive field
@@ -69,8 +69,8 @@ USB port changes and label changes. The server derives identity from
 Replacing the collector ID creates a new namespace. Identity migration is not
 part of v1; preserve its ID and configuration when replacing the Raspberry.
 
-Admission and credentials currently use the CLI. Existing admin archive
-assignment and station configuration work with admitted native senders.
+Admission uses the existing administration UI or ingest CLI. Archive assignment
+and station configuration work with admitted native senders.
 
 ## HTTP request
 
@@ -120,7 +120,7 @@ and `X-Forwarded-Proto`. Untrusted forwarding headers cannot enable HTTPS.
 ```
 
 The example timestamp is illustrative; new events must satisfy the age limits.
-The [request JSON Schema](../schemas/weewx-v1.schema.json) describes the
+The [request JSON Schema](../resources/ingest/weewx-v1.schema.json) describes the
 shape. The receiver additionally enforces timestamp age, finite numbers,
 case-insensitive reserved names, duplicate member/event checks and credentials.
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "weewx-php-ingest"
-version = "0.1.0"
+version = "0.2.0"
 description = "Durable, isolated WeeWX collectors for the weewx-php native receiver"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -24,6 +24,7 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 
 [tool.ruff]
+extend-exclude = ["vendor"]
 target-version = "py311"
 line-length = 100
 

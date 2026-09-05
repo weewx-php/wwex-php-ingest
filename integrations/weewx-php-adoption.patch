@@ -1,0 +1,255 @@
+--- a/src/Ingest/NativeReceiver.php
++++ b/src/Ingest/NativeReceiver.php
+@@ -7,7 +7,7 @@
+ use Throwable;
+ use WeewxPhp\Tick\Runtime;
+ 
+-/** Authenticated, bounded JSON batches. No archive work runs before the ACK. */
++/** Bounded discovery and token-bound JSON batches; adoption gates journal writes. */
+ final class NativeReceiver
+ {
+     private bool $wrote = false;
+@@ -19,7 +19,7 @@
+         return $this->wrote;
+     }
+ 
+-    /** @param callable(): string $readBody Called only after transport, method and token checks. */
++    /** @param callable(): string $readBody Called only after transport, method and token-format checks. */
+     public function handle(string $method, string $query, callable $readBody, string $peer, bool $https, string $contentType, string $authorization): Response
+     {
+         $this->wrote = false;
+@@ -46,8 +46,8 @@
+             }
+             $token = $match[1];
+             $store = $this->runtime->live()->collector();
+-            $collector = $store->authenticate($token);
+-            if (!$store->permit($collector, $now, $config->ingest->senderRequestsPerMinute)) {
++            $known = $store->knownCollector($token);
++            if ($known !== null && !$store->permit($known, $now, $config->ingest->senderRequestsPerMinute)) {
+                 throw new Rejected('rate_limited', 429);
+             }
+             if (strtolower(trim(explode(';', $contentType, 2)[0])) !== 'application/json') {
+@@ -57,10 +57,10 @@
+                 throw new Rejected('retention_too_short', 503);
+             }
+             $batch = NativeParser::parse($readBody());
+-            if ($batch['collector'] !== $collector) {
++            if ($known !== null && $known !== $batch['collector']) {
+                 throw new Rejected('collector_mismatch', 403);
+             }
+-            $results = $store->receive($collector, $token, $batch['events'], $config, $now);
++            $results = $store->receive($batch['collector'], $token, $batch['events'], $config, $now);
+             foreach ($results as $result) {
+                 $this->wrote = $this->wrote || $result['status'] === 'stored';
+             }
+--- a/src/Ingest/CollectorStore.php
++++ b/src/Ingest/CollectorStore.php
+@@ -54,6 +54,60 @@
+         });
+     }
+ 
++    /** A new local token discovers an unadopted collector; existing bindings never change. */
++    private function discover(string $collector, string $token, Config $config, int $now): void
++    {
++        NativeParser::uuid($collector);
++        if (preg_match('/^[a-f0-9]{64}$/D', $token) !== 1) {
++            throw new Rejected('unauthorized', 401);
++        }
++        $bound = $this->db->one('SELECT id FROM weewx_collector WHERE token_hash = ?', [hash('sha256', $token)]);
++        if ($bound !== null && $bound['id'] !== $collector) {
++            throw new Rejected('collector_mismatch', 403);
++        }
++        $row = $this->db->one('SELECT id, token_hash, enabled FROM weewx_collector WHERE id = ?', [$collector]);
++        if ($row !== null) {
++            if ($row['enabled'] !== 1 || !hash_equals(Sqlite::text($row['token_hash']), hash('sha256', $token))) {
++                throw new Rejected('unauthorized', 401);
++            }
++            return;
++        }
++        if ($this->db->one('SELECT id FROM weewx_collector WHERE token_hash = ?', [hash('sha256', $token)]) !== null) {
++            throw new Rejected('collector_mismatch', 403);
++        }
++        $pending = (int) Sqlite::text($this->db->scalar('SELECT COUNT(*) FROM weewx_collector c WHERE NOT EXISTS (SELECT 1 FROM weewx_station s WHERE s.collector = c.id AND s.adopted = 1)'));
++        $total = (int) Sqlite::text($this->db->scalar('SELECT COUNT(*) FROM weewx_collector'));
++        if ($pending >= $config->ingest->maxPending || $total >= 100) {
++            throw new Rejected('discovery_capacity', 503);
++        }
++        $this->db->exec('INSERT INTO weewx_collector (id, name, token_hash, created) VALUES (?, ?, ?, ?)', [$collector, $collector, hash('sha256', $token), $now]);
++        $this->permit($collector, $now, $config->ingest->senderRequestsPerMinute);
++    }
++
++    /** @return array<string, mixed>|null */
++    public function sender(string $sender): ?array
++    {
++        return $this->db->one('SELECT * FROM weewx_station WHERE sender = ?', [$sender]);
++    }
++
++    /** @return list<array<string, mixed>> */
++    public function senders(): array
++    {
++        return iterator_to_array($this->db->query('SELECT * FROM weewx_station ORDER BY first_seen, sender'), false);
++    }
++
++    public function setState(string $sender, string $state, ?string $name = null): void
++    {
++        $row = $this->sender($sender) ?? throw new InvalidArgumentException('unknown station');
++        if ($state === 'adopted') {
++            $this->adopt(Sqlite::text($row['collector']), Sqlite::text($row['station']), $name);
++        } elseif (in_array($state, ['pending', 'blocked', 'ignored'], true)) {
++            $this->db->exec('UPDATE weewx_station SET state = ?, sample = NULL WHERE sender = ?', [$state, $sender]);
++        } else {
++            throw new InvalidArgumentException('invalid station state');
++        }
++    }
++
+     public function rotate(string $id): string
+     {
+         NativeParser::uuid($id);
+@@ -134,6 +188,12 @@
+         }
+     }
+ 
++    public function knownCollector(string $token): ?string
++    {
++        $row = $this->db->one('SELECT id FROM weewx_collector WHERE token_hash = ?', [hash('sha256', $token)]);
++        return $row === null ? null : $this->authenticate($token);
++    }
++
+     public function authenticate(string $token): string
+     {
+         if (preg_match('/^[a-f0-9]{64}$/D', $token) !== 1) {
+@@ -162,9 +222,7 @@
+     public function receive(string $collector, string $token, array $events, Config $config, int $now): array
+     {
+         return $this->db->transaction(function () use ($collector, $token, $events, $config, $now): array {
+-            if ($this->authenticate($token) !== $collector) {
+-                throw new Rejected('collector_mismatch', 403);
+-            }
++            $this->discover($collector, $token, $config, $now);
+             $results = [];
+             $receiptCount = (int) Sqlite::text($this->db->scalar('SELECT COUNT(*) FROM weewx_receipt'));
+             foreach ($events as $event) {
+@@ -259,7 +317,7 @@
+         $sample = Packet::canonical($event->data);
+         $this->db->exec(
+             'UPDATE weewx_station SET last_seen = ?, driver_module = ?, sample = ? WHERE collector = ? AND station = ?',
+-            [$now, $event->module, $row['state'] !== 'blocked' && strlen($sample) <= 8192 ? $sample : null, $collector, $event->station],
++            [$now, $event->module, in_array($row['state'], ['pending', 'adopted'], true) && strlen($sample) <= 8192 ? $sample : null, $collector, $event->station],
+         );
+         return $row;
+     }
+--- a/src/Admin/ReadModel.php
++++ b/src/Admin/ReadModel.php
+@@ -38,6 +38,9 @@
+     {
+         $found = [];
+         foreach ($this->rows('ingest.sdb', 'ingest_sender', 'SELECT id, name, state, protocol, model, last_seen, received, stored FROM ingest_sender ORDER BY first_seen LIMIT 2000') as $row) {
++            $found[Sqlite::text($row['id'])] = $row;
++        }
++        foreach ($this->rows('live.sdb', 'weewx_station', "SELECT sender AS id, name, state, 'weewx' AS protocol, driver_module AS model, last_seen, stored FROM weewx_station ORDER BY first_seen LIMIT 2000") as $row) {
+             $found[Sqlite::text($row['id'])] = $row;
+         }
+         foreach ($this->config->stations as $id => $station) {
+--- a/src/Admin/Service.php
++++ b/src/Admin/Service.php
+@@ -10,6 +10,7 @@
+ use WeewxPhp\Config\Section;
+ use WeewxPhp\Db\Sqlite;
+ use WeewxPhp\Ingest\Store;
++use WeewxPhp\Live\LiveDb;
+ use WeewxPhp\Measurement\Catalog;
+ use WeewxPhp\Weewx\Extractor;
+ 
+@@ -24,19 +25,28 @@
+         $read = new ReadModel($this->path);
+         if (in_array($action, ['station.adopt', 'station.reject', 'station.restore'], true)) {
+             $id = Input::id(Input::text($input, 'station'));
++            $live = LiveDb::open($read->config->settings->liveDbPath(), $read->config->settings->journalMode);
+             $store = Store::open($read->config->settings);
+             try {
+-                if ($store->sender($id) === null) {
++                $native = $live->collector();
++                $name = Input::text($input, 'name');
++                $name = $name === '' ? null : Input::label($name);
++                if ($native->sender($id) !== null) {
++                    $native->setState($id, match ($action) {
++                        'station.adopt' => 'adopted', 'station.reject' => 'ignored', default => 'pending',
++                    }, $name);
++                } elseif ($store->sender($id) !== null) {
++                    if ($action === 'station.adopt') {
++                        $store->adopt($id, $name, $this->now);
++                    } else {
++                        $store->setState($id, $action === 'station.reject' ? 'ignored' : 'pending');
++                    }
++                } else {
+                     throw new Problem('error.station');
+-                }
+-                if ($action === 'station.adopt') {
+-                    $name = Input::text($input, 'name');
+-                    $store->adopt($id, $name === '' ? null : Input::label($name), $this->now);
+-                } else {
+-                    $store->setState($id, $action === 'station.reject' ? 'ignored' : 'pending');
+                 }
+             } finally {
+                 $store->close();
++                $live->close();
+             }
+             $auth = new Auth($read->config->settings);
+             try {
+--- a/src/Cli/Commands/IngestCommand.php
++++ b/src/Cli/Commands/IngestCommand.php
+@@ -45,6 +45,7 @@
+         $runtime = $app->runtime();
+         $console = $app->console();
+         $store = $runtime->ingest();
++        $native = $runtime->live()->collector();
+         if ($action === 'rotate') {
+             $protocol = Protocol::tryFrom($args[0]);
+             $secret = $protocol === null ? $store->replacePassword($args[0]) : $store->rotateSetup($protocol);
+@@ -57,6 +58,20 @@
+         if ($action === 'prune') {
+             $store->prune($runtime->clock->now());
+             $console->line('ingest: maintenance complete');
++            return 0;
++        }
++        if (isset($args[0]) && ($row = $native->sender($args[0])) !== null && in_array($action, ['status', 'sample', 'adopt', 'ignore', 'block', 'reset'], true)) {
++            if ($action === 'status') {
++                $console->line($args[0] . '  ' . Sqlite::text($row['state']) . '  ' . Sqlite::text($row['name']));
++            } elseif ($action === 'sample') {
++                $console->line($row['sample'] === null ? 'no sample' : Sqlite::text($row['sample']));
++            } else {
++                $native->setState($args[0], match ($action) {
++                    'adopt' => 'adopted', 'ignore' => 'ignored', 'block' => 'blocked', default => 'pending',
++                }, $args[1] ?? null);
++                $runtime->log->info('ingest: ' . $action . ' ' . $args[0] . ' (cli)');
++                $console->line($args[0] . ': ' . $action);
++            }
+             return 0;
+         }
+         if ($action === 'status') {
+@@ -131,10 +146,13 @@
+             $console->line('  HTTP: ' . ($runtime->config->ingest->httpWunderground ? 'allowed' : 'disabled'));
+             $console->line('WeeWX JSON');
+             $console->line('  URL: ' . $base . '/ingest/weewx.php');
+-            $console->line('  HTTPS required; credentials: collector add <name>');
++            $console->line('  HTTPS required; configure the collector, then adopt the discovered station');
+             return 0;
+         }
+         if ($action === 'list') {
++            foreach ($native->senders() as $row) {
++                $console->line(Sqlite::text($row['sender']) . '  ' . Sqlite::text($row['state']) . '  weewx  ' . Sqlite::text($row['name']));
++            }
+             foreach ($store->senders() as $sender) {
+                 $console->line(sprintf(
+                     '%s  %s  %s  %s  received=%d stored=%d last=%s',
+--- a/tests/Unit/Ingest/NativeReceiverTest.php
++++ b/tests/Unit/Ingest/NativeReceiverTest.php
+@@ -121,7 +121,7 @@
+         foreach ([['GET', '', true, 'Bearer ' . $this->credentials['token'], 405],
+             ['POST', '', false, 'Bearer ' . $this->credentials['token'], 403],
+             ['POST', 'token=hidden', true, 'Bearer ' . $this->credentials['token'], 400],
+-            ['POST', '', true, 'Bearer ' . str_repeat('0', 64), 401]] as [$method, $query, $https, $auth, $status]) {
++            ['POST', '', true, 'Bearer invalid', 401]] as [$method, $query, $https, $auth, $status]) {
+             $response = $this->receiver->handle($method, $query, static function (): string {
+                 self::fail('body must not be read');
+             }, '192.0.2.1', $https, 'application/json', $auth);

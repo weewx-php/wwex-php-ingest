@@ -1,6 +1,13 @@
 include README.md pyproject.toml
+include install.sh THIRD_PARTY.md
+recursive-include scripts *.py
+recursive-include integrations *.patch
+recursive-include vendor *
+prune vendor/weewx/build
+prune vendor/weewx/dist
+global-exclude *.pyc
 recursive-include docs *.md
 recursive-include schemas *.json
-recursive-include examples *.toml *.conf
+recursive-include examples *.conf
 recursive-include deploy *.service
-recursive-include tests *.py
+recursive-include tests *.py *.sh *.php

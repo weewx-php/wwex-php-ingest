@@ -1,86 +1,112 @@
 # Deployment and operation
 
-## Linux service
+## Installation and service
 
-Install this project under `/opt/weewx-php-ingest` with its virtual environment
-at `/opt/weewx-php-ingest/.venv`. Create the service account and directories:
+From a repository checkout: `sudo bash install.sh --source "$PWD"`.
+The installer manages these paths:
+
+| Path | Contents |
+|---|---|
+| `/opt/weewx-php-ingest/releases/` | Collector and bundled WeeWX source, virtual environment per version |
+| `/opt/weewx-php-ingest/current` | Active release |
+| `/etc/weewx-php-ingest/weewx.conf` | Driver settings, ingest URL and token; mode 0600 |
+| `/var/lib/weewx-php-ingest/` | Persistent station IDs, queues and extension data |
+| `/usr/local/bin/weewx-php-ingest` | CLI |
+
+`sudo weewx-php-ingest update` builds the latest `main` in a new release directory,
+verifies all bundled driver files and checks configuration before stopping the
+service. Activation switches a symlink. If service startup fails, the previous
+release and service unit are restored. Existing configuration and queue contents
+are preserved. Updates require access to the GitHub repository as the installing
+account; private repositories require authentication.
+
+For unattended installation, use `--non-interactive`. If no configuration exists,
+the installer generates the token and collector ID and leaves the service stopped.
+Run the guided assistant to set the domain, scan/select devices and test hardware:
 
 ```sh
-sudo useradd --system --home /var/lib/weewx-php-ingest --shell /usr/sbin/nologin weewx-ingest
-sudo install -d -m 0700 -o weewx-ingest -g weewx-ingest /var/lib/weewx-php-ingest
-sudo install -d -m 0750 -o root -g weewx-ingest /etc/weewx-php-ingest
-sudo install -m 0644 deploy/weewx-php-ingest.service /etc/systemd/system/
-```
-
-Place the configured TOML, WeeWX `.conf` files and token in `/etc/weewx-php-ingest`.
-Set `state_dir = "/var/lib/weewx-php-ingest"`. The token must belong to the service
-account with mode `0600`; protect driver configurations containing credentials
-in the same way. Set `WEEWX_ROOT` to each station's own writable data directory
-if its extension needs files. The supplied unit grants write access only beneath
-`/var/lib/weewx-php-ingest`.
-
-```sh
-sudo -u weewx-ingest /opt/weewx-php-ingest/.venv/bin/weewx-php-ingest --config /etc/weewx-php-ingest/collector.toml check
-sudo systemctl daemon-reload
-sudo systemctl enable --now weewx-php-ingest
+sudo weewx-php-ingest configure
 sudo journalctl -u weewx-php-ingest -f
 ```
 
-The service includes `dialout` for serial devices. Native USB devices may need
-driver-specific udev rules/groups. Use stable `/dev/serial/by-id/...` paths where
-supported. Do not run another WeeWX daemon against the same console.
+The service account joins available `dialout` and `plugdev` groups. Native USB
+hardware may also need driver-specific udev rules. Prefer stable
+`/dev/serial/by-id/...` device paths. Only one process may use a console.
+The service can write beneath `/var/lib/weewx-php-ingest`; extension data belongs
+there. The assistant stops and restarts the service around hardware setup. Manual
+configuration edits require a restart. Token changes are read on the next
+request, subject to existing authentication backoff.
 
-The supervisor uses one worker per station and one uploader process. systemd's
-`KillMode=control-group` also cleans up children if the supervisor is killed.
-Direct CLI runs should be stopped with Ctrl+C/SIGTERM and allowed to finish.
-Configuration changes require a restart. Token-file rotation takes effect on the
-next request, subject to existing authentication backoff.
+The local token is sent over HTTPS on the first upload. The PHP receiver keeps
+only its SHA-256 digest and discovers stations as pending. Use the existing Adopt
+button or `php bin/weewx-php ingest adopt <sender>`. Pending readings stay in the
+collector queue. No receiver-side registration command is needed.
+
+`weewx-php-ingest scan` lists USB/serial devices. USB IDs suggest matching drivers;
+generic serial adapters cannot identify a weather station model. The assistant
+asks for network device addresses directly. Hardware tests wait up to 60 seconds
+for an actual LOOP reading in a separate process. Failed tests return to setup;
+no configuration is saved before all selected stations pass.
 
 ## Driver configuration and extensions
 
-Keep normal driver sections and `loader(config_dict, engine)` contracts. Two Davis
-instances each have `[Vantage]` in separate files. Use the same module twice with
-separate device options and distinct station keys.
+One station uses ordinary `[Station]` and `[Vantage]`, `[Simulator]` or another
+WeeWX driver section. `[Ingest]` holds URL, token, collector ID and collector
+settings. File paths are relative to `weewx.conf`; use absolute paths for a service.
+Exactly one of `token`, `token_file` and `token_env` may supply the token.
+Credentials never belong in the URL or command-line arguments.
 
-Install extensions with upstream `weectl extension install` using the relevant
-station's WeeWX config/environment. `WEEWX_ROOT`/`USER_ROOT` and `user.extensions`
-are initialized in that station's worker. Additional import directories use
-`python_paths = ["/opt/station-extension/bin"]`. Set an absolute `python` executable
-per station for separate virtual environments; install the collector and the
-extension's requirements in each environment. Local extensions are trusted code.
+Multiple stations use `[Stations]`, `[[garden]]`, then `[[[Station]]]` and the
+normal driver section as `[[[Vantage]]]`. Each instance receives its own configuration
+and engine. See [weewx-multi.conf](../examples/weewx-multi.conf).
+Keep station keys and the state directory stable to preserve identities.
 
-The collector replaces every `[Engine][[Services]]` group at runtime without
-rewriting the configuration. No upstream calibration, conversion, QC, derived
-observations, archive storage, REST uploads or report services run by default.
-Driver-internal callbacks, such as Vantage gust tracking, still run. Explicitly
-enable required auxiliary services in TOML:
+The repository bundles the official WeeWX drivers and matching engine. The daily
+GitHub Action checks stable PyPI releases, validates the archive and file checksums,
+and tests the changed release before committing. It can also be run manually from
+GitHub Actions. This does not automatically restart or update installed stations.
 
-```toml
-[stations.garden.services]
-prep_services = ["weewx.engine.StdTimeSynch"]
-data_services = []
-process_services = ["user.myservice.RequiredService"]
-xtype_services = []
+Keep third-party `user.*` modules in `/var/lib/weewx-php-ingest/bin/user/`, with
+`WEEWX_ROOT = /var/lib/weewx-php-ingest` and `USER_ROOT = bin/user`. Set separate
+roots inside each station section if an extension stores instance-specific data.
+Put additional pip requirements in `/etc/weewx-php-ingest/requirements.txt`, owned
+by root. The installer reapplies them when building each new version. Extension
+files and configuration remain outside release directories. Use each extension's
+upstream instructions for its additional files and driver options. Local drivers,
+services, requirements and import paths are trusted administrator code.
+
+Additional Python import directories use a comma-separated `python_paths` value
+in the station's Ingest section. An absolute `python` executable can select a
+separate environment; that environment must contain the collector and its required
+packages and is maintained separately from the default managed environment.
+
+The collector supplies empty engine service groups. Driver callbacks still run;
+archive storage, reporting and external uploads are disabled. Explicit auxiliary
+services for a single station use:
+
+```ini
+[Ingest]
+    # Other required Ingest settings remain here.
+    [[Services]]
+        prep_services = weewx.engine.StdTimeSynch
+        process_services = user.myservice.RequiredService
 ```
 
-`StdTimeSynch` may set the device clock. Document corrections applied by auxiliary
-services to avoid applying them again in PHP. Archive, reporting and external
-upload service groups cannot be enabled in the collector profile.
+For multiple stations, place `[[[[Services]]]]` beneath that station's
+`[[[Ingest]]]`. `StdTimeSynch` may set the device clock. Document any corrections
+applied by auxiliary services to avoid repeating them in PHP.
 
-`lifecycle_interval` and `lifecycle_delay` supply END_ARCHIVE_PERIOD, POST_LOOP and
-PRE_LOOP coordination without reading hardware archives. This preserves periodic
-gust resets and allows clock/device work between LOOP sessions. Match the period
-to the device's expected interval where necessary; it does not set the PHP archive
-interval or change the hardware logger.
-
-Only numeric/null observations are accepted. A driver emitting string metadata
-must explicitly exclude the relevant keys, for example `exclude_fields = ["source"]`.
-Invalid timestamps, units, fields or values stop that worker with `invalid_packet`.
-Correct its configuration/driver and restart the service.
+`lifecycle_interval` and `lifecycle_delay` coordinate END_ARCHIVE_PERIOD, POST_LOOP
+and PRE_LOOP without reading hardware archives. They do not set the PHP archive
+interval. String metadata must be explicitly excluded, for example
+`exclude_fields = source`. Invalid packet fields or values stop that worker with
+`invalid_packet`; correct the driver/configuration and restart.
 
 ## Storage, retry and recovery
 
-`max_events` and `max_bytes` apply per station and include quarantined events.
+`max_events` and `spool_max_bytes` in a single station's `[Ingest]` bound its queue.
+For multiple stations, use `max_events` and `max_bytes` in each `[[[Ingest]]]`.
+Both quotas include quarantined events. Top-level `max_bytes` bounds HTTP requests.
 Bytes count serialized event payloads; provision additional capacity for SQLite
 indexes, free pages and WAL. `min_free_bytes` reserves disk headroom. Queued
 readings are never silently expired or compacted.
@@ -129,13 +155,18 @@ Redirects and environment HTTP proxies are not followed. Use the final
 ## Tests and builds
 
 ```sh
-python -m pip install -e '.[test]'
+python -m pip install ./vendor/weewx -e '.[test]'
+python scripts/sync_weewx.py --check
+python scripts/verify_install.py .
 python -m pytest -q
-python -m ruff check src tests
-python -m ruff format --check src tests
+python -m ruff check src tests scripts
+python -m ruff format --check src tests scripts
 python -m pip_audit --skip-editable
 python -m build
 ```
+
+In a disposable Linux environment, `sudo bash tests/installer_smoke.sh "$PWD"`
+checks installation, updates, repeated updates and failure preservation.
 
 The optional PHP integration test needs the separate project, PHP and SQLite3:
 

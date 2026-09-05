@@ -53,7 +53,7 @@ def test_real_simulators_independent_processes_survive_one_crash(make_config):
 def test_blocked_driver_watchdog_restarts_only_silent_process(make_config):
     cfg = make_config()
     path = cfg.stations[0].config
-    path.write_text(path.read_text().replace("loop_interval=0.1", "loop_interval=600"))
+    path.write_text(path.read_text().replace("loop_interval=0.1", "loop_interval=600", 1))
     cfg = dataclasses.replace(
         cfg, stations=(dataclasses.replace(cfg.stations[0], startup_timeout=1), cfg.stations[1])
     )
@@ -148,10 +148,8 @@ def test_full_spool_pauses_one_worker_and_resumes_without_restart(make_config):
     cfg = make_config(max_events=2)
     # Only s0 has the small quota; s1 must keep collecting.
     text = cfg.path.read_text()
-    prefix, second = text.split("[stations.s1]")
-    cfg.path.write_text(
-        prefix + "[stations.s1]" + second.replace("max_events = 2", "max_events = 200")
-    )
+    prefix, second = text.split("[[s1]]")
+    cfg.path.write_text(prefix + "[[s1]]" + second.replace("max_events = 2", "max_events = 200"))
     from weewx_php_ingest.config import load_config
 
     cfg = load_config(cfg.path)
@@ -179,7 +177,7 @@ def test_supervisor_collects_and_uploads_in_separate_processes(make_config, tls_
     cfg = make_config(endpoint=tls_server["url"])
     cfg.path.write_text(
         cfg.path.read_text().replace(
-            "[collector]", f'[collector]\nca_file = "{tls_server["ca"].as_posix()}"'
+            "[Ingest]", f'[Ingest]\nca_file = "{tls_server["ca"].as_posix()}"', 1
         )
     )
     cfg = load_config(cfg.path)
