@@ -1,0 +1,26 @@
+[Unit]
+Description=WeeWX PHP collector
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=weewx-ingest
+Group=weewx-ingest
+SupplementaryGroups=dialout
+WorkingDirectory=/var/lib/weewx-php-ingest
+ExecStart=/opt/weewx-php-ingest/.venv/bin/weewx-php-ingest --config /etc/weewx-php-ingest/collector.toml run
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+KillMode=control-group
+UMask=0077
+StateDirectory=weewx-php-ingest
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/weewx-php-ingest
+
+[Install]
+WantedBy=multi-user.target

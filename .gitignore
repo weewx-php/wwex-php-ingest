@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+state/
+*.sqlite3*
+*.token
+collector.toml
+!examples/collector.toml
+.coverage
+htmlcov/
+.test-tmp/
+pytest-cache-files-*/
