@@ -186,8 +186,10 @@ def test_supervisor_collects_and_uploads_in_separate_processes(make_config, tls_
         # Receiver commit precedes the HTTP ACK and the uploader's local commit.
         wait_for(
             supervisor,
-            lambda: len(tls_server["receipts"]) >= 6
-            and all(s.get_meta("last_success") for s in supervisor.spools),
+            lambda: (
+                len(tls_server["receipts"]) >= 6
+                and all(s.get_meta("last_success") for s in supervisor.spools)
+            ),
         )
         assert len({c.process.pid for c in supervisor.children}) == 3
         assert {p["station_id"] for p in tls_server["receipts"].values()} == {
