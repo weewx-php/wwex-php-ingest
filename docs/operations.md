@@ -2,7 +2,13 @@
 
 ## Installation and service
 
-From a repository checkout: `sudo bash install.sh --source "$PWD"`.
+Direkt installieren; die geführte Einrichtung startet anschließend:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/weewx-php/wwex-php-ingest/main/install.sh | sudo bash
+```
+
+Alternativ aus einem Repository-Checkout: `sudo bash install.sh --source "$PWD"`.
 The installer manages these paths:
 
 | Path | Contents |
@@ -17,20 +23,18 @@ The installer manages these paths:
 verifies all bundled driver files and checks configuration before stopping the
 service. Activation switches a symlink. If service startup fails, the previous
 release and service unit are restored. Existing configuration and queue contents
-are preserved. Updates require access to the GitHub repository as the installing
-account; private repositories require authentication.
+are preserved. Das Repository ist öffentlich; Installation und Updates über HTTPS
+benötigen keine GitHub-Anmeldung.
 
-### GitHub-Zugriff
+### Unbeaufsichtigte Installation
 
-Das Repository ist privat. Der Benutzer, der den Installer ausführt (bei `sudo`
-also root), benötigt GitHub-Zugriff für Installation und Updates. Bei bereits
-eingerichtetem SSH-Zugriff aus dem Repository installieren:
+Mit `--non-interactive` wird die Einrichtung übersprungen:
 
 ```sh
-sudo bash install.sh --source "$PWD" --repository git@github.com:weewx-php/wwex-php-ingest.git
+curl -fsSL https://raw.githubusercontent.com/weewx-php/wwex-php-ingest/main/install.sh | sudo bash -s -- --non-interactive
 ```
 
-Die Repository-Adresse wird für spätere Updates gespeichert.
+Bei einer neuen Installation bleibt der Dienst bis zur Einrichtung gestoppt.
 
 ### Einrichtung und Diagnose
 

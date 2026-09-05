@@ -5,17 +5,15 @@ Liest Wetterstationen mit WeeWX-Treibern aus und sendet Messwerte an weewx-php.
 ## Installieren
 
 Für Debian 12+, Ubuntu 24.04+ und Raspberry Pi OS Bookworm+ mit Python 3.11+ und systemd.
-Im heruntergeladenen Repository:
 
 ```sh
-sudo bash install.sh --source "$PWD"
+curl -fsSL https://raw.githubusercontent.com/weewx-php/wwex-php-ingest/main/install.sh | sudo bash
 ```
 
 Installiert den Collector, alle mitgelieferten WeeWX-Treiber und den Dienst.
 Token und Collector-ID werden automatisch erzeugt.
 
-Das Repository ist privat. Installation und Updates benötigen GitHub-Zugriff.
-[Zugriff einrichten](docs/operations.md#github-zugriff).
+Kein Download von Hand, kein GitHub-Konto nötig.
 
 ## Einrichten
 
