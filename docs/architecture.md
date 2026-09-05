@@ -1,6 +1,8 @@
 # weewx-php-ingest architecture
 
-Status: 2026-09-05. The native PHP receiver v1 is implemented in the separate
+Status: 2026-09-05. Hardware logger support is implemented by the
+[native v2 extension](native-ingest-v2.md); rollups remain future work.
+ The native PHP receiver v1 is implemented in the separate
 weewx-php project. The Python v1 collector is implemented; see
 [implementation and verification](implementation.md). Hardware history and
 rollups remain future protocol work.
@@ -247,13 +249,15 @@ Network outages and collector downtime are different cases. A running collector
 can replay its spool. After power loss, hardware logger backfill can recover
 only what the device stored; historical LOOP detail cannot be recreated.
 
-Future hardware history (outside v1): poll `genStartupRecords()` and `genArchiveRecords()` independently per worker,
-coordinated with its LOOP generator on the same device-owning thread. Advance
-the local hardware-history cursor only after committing those records locally.
-PHP must resolve LOOP/hardware overlap per station, field and time coverage so
-rain is not counted twice. An exact matching hardware interval can supply an
-archive record; larger or misaligned intervals must not be silently split or
-overlaid onto smaller PHP intervals. This requires dedicated archive handling.
+Hardware history is implemented in [v2](native-ingest-v2.md): each worker polls
+`genStartupRecords()` and `genArchiveRecords()` between LOOP cycles. The hardware
+cursor advances atomically with local persistence. Each record keeps its own
+original interval, independent of polling, upload and PHP target cadence. PHP
+preserves selected hardware history beyond journal retention, combines complete
+intervals and resolves historical coverage per observation. Fine or misaligned
+series expose original coarse spans separately; they never split a rain total or
+add hardware amounts to overlapping LOOP totals. See v2 for the JSON fallback
+layer, coverage rules and fixed-grid export boundary.
 
 ## Accumulator rollups
 

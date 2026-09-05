@@ -1,0 +1,268 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WeeWX-PHP native ingest v3 request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "collector_id",
+    "packets"
+  ],
+  "properties": {
+    "version": {
+      "const": 3
+    },
+    "collector_id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "packets": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "items": {
+        "$ref": "#/$defs/packet"
+      }
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "packet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "station_id",
+        "event_id",
+        "driver_module",
+        "kind",
+        "dateTime",
+        "usUnits",
+        "data"
+      ],
+      "properties": {
+        "station_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "event_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "driver_module": {
+          "type": "string",
+          "maxLength": 160,
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)+$"
+        },
+        "kind": {
+          "enum": [
+            "loop",
+            "archive"
+          ]
+        },
+        "dateTime": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 253402300799
+        },
+        "usUnits": {
+          "type": "integer",
+          "enum": [
+            1,
+            16,
+            17
+          ]
+        },
+        "data": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 256,
+          "propertyNames": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$"
+          },
+          "additionalProperties": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "interval": {
+          "type": "number",
+          "minimum": 0.016666666666666666,
+          "maximum": 1440,
+          "description": "Original hardware archive duration in minutes; must represent a whole number of seconds."
+        },
+        "source": {
+          "$ref": "#/$defs/source"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "archive"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "interval"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "interval"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "source"
+            ]
+          },
+          "then": {
+            "properties": {
+              "driver_module": {
+                "enum": [
+                  "weewx_php_ingest.sdr",
+                  "weewx_php_ingest.gw1000",
+                  "weewx_php_ingest.weatherflow"
+                ]
+              },
+              "kind": {
+                "const": "loop"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "driver_module": {
+                "enum": [
+                  "weewx_php_ingest.sdr",
+                  "weewx_php_ingest.gw1000",
+                  "weewx_php_ingest.weatherflow"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "source"
+            ]
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "source"
+            ],
+            "properties": {
+              "source": {
+                "properties": {
+                  "type": {
+                    "const": "rtl_433"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "driver_module": {
+                "const": "weewx_php_ingest.sdr"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "source"
+            ],
+            "properties": {
+              "source": {
+                "properties": {
+                  "type": {
+                    "const": "gw1000"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "driver_module": {
+                "const": "weewx_php_ingest.gw1000"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "source"
+            ],
+            "properties": {
+              "source": {
+                "properties": {
+                  "type": {
+                    "const": "weatherflow_udp"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "driver_module": {
+                "const": "weewx_php_ingest.weatherflow"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "receiver_id",
+        "model",
+        "sensor_id",
+        "channel"
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "rtl_433",
+            "gw1000",
+            "weatherflow_udp"
+          ]
+        },
+        "receiver_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "model": {
+          "type": "string",
+          "pattern": "^[ -~]{1,64}$"
+        },
+        "sensor_id": {
+          "type": "string",
+          "pattern": "^[ -~]{1,64}$"
+        },
+        "channel": {
+          "type": "string",
+          "pattern": "^[ -~]{0,64}$"
+        }
+      }
+    }
+  },
+  "$comment": "The receiver additionally enforces UTF-8, a 262144-byte body bound, JSON integer token syntax, finite numeric values, time bounds, case-insensitive reserved measurement names, distinct event IDs, unique JSON object members, authenticated collector binding and station admission. Archive interval must be finite and represent 1-86400 whole seconds; dateTime must exceed that duration. Only original hardware aggregates are supported, not software rollups. Sensor station_id must equal the UUIDv5 specified by the v3 source contract."
+}

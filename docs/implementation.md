@@ -1,15 +1,15 @@
-# Collector v1 implementation
+# Collector implementation
 
-Implemented on 2026-09-05 against the mirrored native v1 contract and upstream
+Implemented on 2026-09-05 against the mirrored native v1 and [v2 hardware contract](native-ingest-v2.md) and upstream
 WeeWX 5.5.0. Collector code, tests and deployment files are confined to this
 project. The matching PHP receiver change enables native discovery through its existing Adopt UI/CLI.
 
 | Module | Responsibility |
 |---|---|
 | `config.py` | Unified ConfigObj weewx.conf, isolated station sections, bounded settings, HTTPS and token validation. |
-| `runtime.py` | Real StdEngine per worker; isolated configuration, upstream extension startup, post-callback journaling and LOOP lifecycle. |
+| `runtime.py` | Real StdEngine per worker; isolated configuration, upstream extension startup, post-callback journaling, LOOP lifecycle and hardware catch-up. |
 | `spool.py` | Per-station UUID/collector binding, immutable event payloads, FULL/WAL commits, quotas and persistent retry/quarantine state. |
-| `protocol.py` | v1 field/value validation, exact timestamp/unit integer encoding and identity-based ACK validation. |
+| `protocol.py` | v1/v2 field/value validation, exact timestamp/unit integer encoding and identity-based ACK validation. |
 | `transport.py` | Verified direct HTTPS, bounded response body, timeouts, no redirects and one credential header. |
 | `uploader.py` | Fair live/backlog batches, persisted learned limits, station/global backoff and explicit event acknowledgements. |
 | `supervisor.py`, `locking.py` | Worker/uploader subprocesses, silence watchdogs, independent restart backoff and exclusive OS locks. |
@@ -25,8 +25,10 @@ all station/event identities untouched.
 
 The engine journals after the complete NEW_LOOP_PACKET dispatch, including
 callbacks registered by a driver during STARTUP. The lifecycle replaces only the
-coordination responsibilities needed for LOOP collection. It never runs StdArchive,
-calls hardware history generators, creates rollups or starts report services.
+coordination responsibilities needed for LOOP collection. In hardware mode it also
+journals original NEW_ARCHIVE_RECORD events after callbacks and calls the original
+startup/periodic hardware generators. The cursor commits with the spool event.
+It never runs the StdArchive database service, creates rollups or starts report services.
 All seven upstream service groups are explicitly configured, including empty
 xtype services, to avoid implicit defaults.
 
@@ -73,8 +75,21 @@ callback integration, not compatibility with every third-party extension. Upstre
 `weectl` imports Unix-specific `grp` on Windows; use Linux for the documented
 extension-install workflow. The collector's Simulator/runtime tests run on Windows.
 
-The PHP integration test verifies journal/receipt delivery. Multi-day archive/day
-repair equivalence remains covered by the separate PHP project's tests and was not
-re-run as part of this collector suite. Hardware archive recovery and aggregate
-protocols remain explicitly outside v1. No production receiver credentials or
-device connection have been configured in this project.
+The PHP integration test verifies journal/receipt delivery, station adoption and
+lost-ACK recovery. The hardware case also passes original five-minute Simulator
+records through the real HTTPS/PHP endpoint to one-minute archives: original
+history survives in the archive, period rain remains correct, and minute gaps
+carry separate five-minute fallback spans. Driver lifecycle tests also exercise
+variable historical durations independently of the current polling cadence.
+Multi-day replay and duration-weighted/coarser aggregation are covered by PHP's
+suite. Splitting hardware aggregates remains unsupported. No production receiver
+credentials or device connection have been configured in this project.
+
+Hardware v2 verification: 109 collector tests passed in Docker against WeeWX 5.5.0,
+including real PHP/TLS delivery for both packet kinds. PHP archive/replay verification
+and the shared security review are recorded in
+[the hardware review](../../weewx-php/docs/reviews/hardware-ingest.md).
+
+Interval decoupling verification and security review:
+[PHP review](../../weewx-php/docs/reviews/interval-decoupling.md).
+The contract document is mirrored from PHP with only relative links changed.

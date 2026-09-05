@@ -1,3 +1,8 @@
 * text=auto eol=lf
+src/weewx_php_ingest/_vendor/** -text -eol -whitespace
 vendor/weewx/** -text -eol -whitespace
 integrations/*.patch -whitespace
+tests/fixtures/purple_upstream/** -text -eol -whitespace
+tests/fixtures/airgradient_upstream/** -text -eol -whitespace
+tests/fixtures/airlink_upstream/** -text -eol -whitespace
+tests/fixtures/airq_upstream/** -text -eol -whitespace

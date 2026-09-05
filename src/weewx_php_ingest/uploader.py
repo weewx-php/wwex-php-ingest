@@ -19,7 +19,7 @@ def backoff(attempt, base, maximum):
 
 class Uploader:
     def __init__(self, config, spools, client):
-        self.config, self.spools, self.client = config, list(spools), client
+        self.config, self.spools, self.client = config, spools, client
         self.cursor = 0
         self.packet_limit = min(
             [config.max_packets]
@@ -79,6 +79,9 @@ class Uploader:
         log.warning("upload: %s; retry in %.1fs", reason, delay)
 
     def tick(self, now=None):
+        from .sensor_sources import discover_spools
+
+        discover_spools(self.config, self.spools)
         now = time.time() if now is None else now
         if now < self.next_attempt:
             return 0

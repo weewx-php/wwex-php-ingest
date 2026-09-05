@@ -163,7 +163,14 @@ Das Paket muss einen WeeWX-Installer (`install.py`) enthalten.
 
 5. Zusätzliche Python-Abhängigkeiten laut Treiberanleitung in die root-eigene
    `/etc/weewx-php-ingest/requirements.txt` eintragen. Falls erforderlich, mit
-   `sudo weewx-php-ingest update` installieren. Danach prüfen und starten:
+   folgendem Befehl in die aktive Umgebung installieren (ein Update auf dieselbe
+   Collector-Version führt keine Neuinstallation aus):
+
+   ```sh
+   sudo /opt/weewx-php-ingest/current/.venv/bin/python -m pip install -r /etc/weewx-php-ingest/requirements.txt
+   ```
+
+   Danach prüfen und starten:
 
    ```sh
    sudo -u weewx-ingest weewx-php-ingest check

@@ -157,7 +157,7 @@ def select_hardware(existing):
     except (ImportError, AttributeError, KeyError, ValueError) as exc:
         raise ConfigError("Driver configuration unavailable") from exc
     options["driver"] = module
-    return {
+    result = {
         **existing,
         "Station": {
             "latitude": "0",
@@ -168,13 +168,53 @@ def select_hardware(existing):
         },
         name: options,
     }
+    if module == "weewx_php_ingest.virtual":
+        configure_virtual(result)
+    if module in (
+        "weewx_php_ingest.sdr",
+        "weewx_php_ingest.gw1000",
+        "weewx_php_ingest.weatherflow",
+    ):
+        result["StdArchive"] = {"record_generation": "software"}
+    return result
+
+
+def configure_virtual(data):
+    from .service_profiles import configure
+
+    configure(data, ask)
 
 
 def preview_upload(config, samples):
-    spools = open_spools(config)
+    spools = open_spools(config, sensors=False)
     try:
         for spool in spools:
             sample = samples[spool.station.key]
+            if spool.get_meta("driver_module") in (
+                "weewx_php_ingest.sdr",
+                "weewx_php_ingest.gw1000",
+                "weewx_php_ingest.weatherflow",
+            ):
+                from .sensor_sources import Router, sensor_uuid
+
+                sample = {**sample, "source": {**sample["source"], "receiver_id": spool.station_id}}
+                sample["station_id"] = sensor_uuid(sample["source"])
+                router = Router(config, spool)
+                try:
+                    stream = sample.pop("_stream", "radio")
+                    counters = sample.pop("_counters", ())
+                    if stream != "radio":
+                        import uuid
+
+                        sample["event_id"] = str(
+                            uuid.uuid5(
+                                uuid.UUID(sample["station_id"]), f"{stream}:{sample['dateTime']}"
+                            )
+                        )
+                    router.append(sample, stream=stream, counters=counters)
+                finally:
+                    router.close()
+                continue
             spool.append(
                 event_from_loop(
                     {

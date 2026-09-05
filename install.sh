@@ -99,15 +99,26 @@ revision=$(git_source rev-parse HEAD)
 [[ $revision =~ ^[0-9a-f]{40}$ ]] || die 'Invalid source revision.'
 exec 9>"$ROOT/install.lock"
 flock -n 9 || die 'An installation or update is already running.'
+radio_changed=0
+if ((UPDATE)); then
+    radio_before=$(dpkg-query -W -f='${Version}' rtl-433 2>/dev/null || true)
+    apt-get update -qq
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq rtl-433
+    radio_after=$(dpkg-query -W -f='${Version}' rtl-433)
+    [[ $radio_before == "$radio_after" ]] || radio_changed=1
+fi
 if ((UPDATE)) && [[ -f $ROOT/current/REVISION ]] && [[ $(cat "$ROOT/current/REVISION") == "$revision" ]]; then
+    if ((radio_changed && SERVICE)) && [[ -f /etc/systemd/system/weewx-php-ingest.service ]]; then
+        systemctl try-restart weewx-php-ingest
+    fi
     printf 'Current: %s\n' "$revision"
     exit 0
 fi
 
 # Install native build/USB requirements once. No existing Python environment is modified.
-if [[ ! -f $ROOT/system-dependencies ]]; then
+if [[ ! -f $ROOT/system-dependencies ]] || ! command -v rtl_433 >/dev/null; then
     apt-get update -qq
-    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-dev build-essential libusb-1.0-0
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-dev build-essential libusb-1.0-0 rtl-433
     touch "$ROOT/system-dependencies"
 fi
 release=$(mktemp -d "$ROOT/releases/$revision.XXXXXXXX")

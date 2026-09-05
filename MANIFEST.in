@@ -11,3 +11,5 @@ recursive-include schemas *.json
 recursive-include examples *.conf
 recursive-include deploy *.service
 recursive-include tests *.py *.sh *.php
+include tests/fixtures/purple_upstream/LICENSE tests/fixtures/purple_upstream/README.md
+recursive-include tests/fixtures LICENSE README.md

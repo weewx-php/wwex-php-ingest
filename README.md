@@ -34,7 +34,45 @@ sudo weewx-php-ingest configure
 ```
 
 Driver settings, URL, and token are stored in `/etc/weewx-php-ingest/weewx.conf`.
-[Example configuration](examples/weewx.conf) · [Multiple stations](examples/weewx-multi.conf)
+[Example configuration](examples/weewx.conf) Ã‚Â· [Multiple stations](examples/weewx-multi.conf)
+
+## Virtual stations
+
+Select **Virtual**, then **PurpleAir**, **AirGradient**, **AirLink** or **air-Q**.
+Each instance sends only its service's measurements and is adopted separately.
+
+[Service installation, setup and examples](docs/virtual-stations.md)
+
+## RTL-SDR sensors
+
+Select **RTL433** during setup. `rtl-433` is installed automatically.
+Each identified sensor appears as a separate station in PHP: **adopt, then map fields**.
+One USB receiver serves all its sensors. New sensors appear automatically.
+
+[Configuration and contract](docs/native-ingest-v3.md) Ã‚Â· [Example](examples/weewx-sdr.conf)
+
+## GW1000 and WeatherFlow / Tempest
+
+Select **GW1000** or **WeatherFlowUDP** during setup.
+GW1000 discovers the gateway on your LAN or accepts its IPv4 address.
+WeatherFlow listens on UDP port 50222; the hub must be on the same LAN.
+Each detected sensor/device appears in PHP: **adopt, then map fields**.
+
+[Configuration example](examples/weewx-network.conf) Â· [Sensor handling and limits](docs/native-ingest-v3.md#gw1000-lan-sensors)
+
+## Hardware archive
+
+```ini
+[StdArchive]
+    record_generation = hardware
+```
+
+Sends original logger records alongside LOOP readings. Unsupported drivers fall back
+to LOOP collection. Logger, upload and PHP archive intervals are independent. PHP keeps original
+logger intervals, combines complete spans and exposes coarse history alongside
+finer gaps without inventing measurements.
+
+[Contract and recovery](docs/native-ingest-v2.md) Ã‚Â· [Request schema](schemas/weewx-v2.schema.json)
 
 ## Update
 
@@ -44,6 +82,8 @@ sudo weewx-php-ingest update
 
 Updates the collector and bundled drivers. A GitHub Action checks daily for new
 stable WeeWX releases. Configuration and queued observations are preserved.
+A separate daily Action checks the bundled GW1000 parser and tests updates before publishing.
+Also updates `rtl-433` from the configured OS repositories.
 
 ## Additional drivers from GitHub
 
@@ -54,4 +94,4 @@ URL. The package must be a WeeWX extension containing `install.py`.
 Select additional drivers in `weewx.conf`; guided setup lists only bundled drivers.
 Third-party drivers are updated separately.
 
-[Operation and troubleshooting](docs/operations.md) · [WeeWX license](THIRD_PARTY.md)
+[Operation and troubleshooting](docs/operations.md) Ã‚Â· [WeeWX license](THIRD_PARTY.md)

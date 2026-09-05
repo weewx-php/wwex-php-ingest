@@ -2,6 +2,9 @@
 
 # Native WeeWX ingest: version 1
 
+Hardware logger support is specified in the [v2 extension](native-ingest-v2.md).
+Existing v1 producers and queued LOOP events remain supported.
+
 Implemented endpoint: **`POST /ingest/weewx.php`**. The Python collector runs
 separately on a Raspberry Pi or another machine in the station owner's LAN.
 It initiates HTTPS requests to weewx-php on the web host. PHP needs no Python,

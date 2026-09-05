@@ -22,7 +22,7 @@ class SpoolFull(SpoolError):
 
 
 class Spool:
-    def __init__(self, path, collector_id, driver_module, station):
+    def __init__(self, path, collector_id, driver_module, station, *, station_id=None):
         self.path, self.station = Path(path), station
         self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         if os.name != "nt":
@@ -65,13 +65,14 @@ class Spool:
                 identity = self.get_meta("collector_id")
                 if identity is None:
                     self.set_meta("collector_id", collector_id)
-                    self.set_meta("station_id", str(uuid.uuid4()))
+                    self.set_meta("station_id", station_id or str(uuid.uuid4()))
                     self.set_meta("driver_module", driver_module)
                     self.set_meta("schema", 1)
                 elif (
                     identity != collector_id
                     or self.get_meta("driver_module") != driver_module
                     or self.get_meta("schema") != 1
+                    or (station_id is not None and self.get_meta("station_id") != station_id)
                 ):
                     raise SpoolError("spool_identity_mismatch")
             self.station_id = self.get_meta("station_id")
@@ -112,7 +113,7 @@ class Spool:
             and shutil.disk_usage(self.path.parent).free >= self.station.min_free_bytes + size
         )
 
-    def append(self, event, now=None):
+    def append(self, event, now=None, *, metadata=None):
         payload = encode(event)
         if event["station_id"] != self.station_id or event["driver_module"] != self.get_meta(
             "driver_module"
@@ -125,9 +126,18 @@ class Spool:
                 "INSERT INTO events(event_id,timestamp,payload,size) VALUES (?,?,?,?)",
                 (event["event_id"], event["dateTime"], payload, len(payload)),
             )
+            if event["kind"] == "archive":
+                # The record owns its duration; polling and upload cadence are independent.
+                self.set_meta("hardware_last_interval", event["interval"] * 60)
+                # Cursor and payload commit together, independently of upload acknowledgement.
+                self.set_meta(
+                    "hardware_cursor", max(self.get_meta("hardware_cursor", 0), event["dateTime"])
+                )
             self.set_meta("last_collected", time.time() if now is None else now)
             self.set_meta("collection_state", "running")
             self.set_meta("collection_error", None)
+            for key, value in (metadata or {}).items():
+                self.set_meta(key, value)
         return event["event_id"]
 
     def candidates(self, now, limit, newest_first=False):
@@ -215,6 +225,13 @@ class Spool:
             "upload_next_attempt",
             "worker_pid",
             "worker_restarts",
+            "record_generation",
+            "hardware_state",
+            "hardware_error",
+            "hardware_cursor",
+            "hardware_interval",
+            "hardware_last_interval",
+            "source",
         ):
             usage[key] = self.get_meta(key)
         age_limit = self.get_meta("receiver_max_age_seconds") or max_age_seconds

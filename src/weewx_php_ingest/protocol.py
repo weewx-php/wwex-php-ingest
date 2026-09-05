@@ -1,4 +1,4 @@
-"""Strict native v1 serialization. Source events never change on retry."""
+"""Strict native v1/v2 serialization. Source events never change on retry."""
 
 import json
 import math
@@ -63,8 +63,42 @@ def event_from_loop(packet, station_id, driver_module, exclude_fields=()):
     }
 
 
+def event_from_archive(record, station_id, driver_module, exclude_fields=()):
+    """Original logger aggregate. Its UUID survives redelivery by the hardware."""
+    interval = record.get("interval")
+    if (
+        type(interval) not in (int, float)
+        or not 1 / 60 <= interval <= 1440
+        or abs(interval * 60 - round(interval * 60)) > 0.000001
+    ):
+        raise ProtocolError("invalid_interval")
+    event = event_from_loop(
+        {k: v for k, v in record.items() if k != "interval"},
+        station_id,
+        driver_module,
+        exclude_fields,
+    )
+    seconds = round(interval * 60)
+    if event["dateTime"] <= seconds:
+        raise ProtocolError("invalid_timestamp")
+    event["kind"] = "archive"
+    event["interval"] = interval
+    event["event_id"] = str(
+        uuid.uuid5(uuid.UUID(station_id), f"archive:{driver_module}:{event['dateTime']}:{seconds}")
+    )
+    return event
+
+
+def version_for(packets):
+    if any("source" in p for p in packets):
+        return 3
+    return 2 if any(p["kind"] == "archive" for p in packets) else 1
+
+
 def envelope(collector_id, packets):
-    return encode({"version": 1, "collector_id": collector_id, "packets": packets})
+    return encode(
+        {"version": version_for(packets), "collector_id": collector_id, "packets": packets}
+    )
 
 
 def decode_response(body, packets):
@@ -89,7 +123,7 @@ def decode_response(body, packets):
     if (
         not isinstance(response, dict)
         or type(response.get("version")) is not int
-        or response["version"] != 1
+        or response["version"] != version_for(packets)
         or response.get("status") != "ok"
         or not isinstance(response.get("results"), list)
     ):
