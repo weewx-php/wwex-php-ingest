@@ -11,7 +11,7 @@ null or excluded values) are skipped. No weather values are simulated.
 ## PurpleAir
 
 1. Install [weewx-purple](https://github.com/chaunceygardiner/weewx-purple) using
-   the [extension installation procedure](operations.md#treiber-von-github-installieren).
+   the [extension installation procedure](operations.md#installing-drivers-from-github).
    Add `requests>=2.32` and `python-dateutil>=2.9` to the root-owned
    `/etc/weewx-php-ingest/requirements.txt`, one per line. Install them into the
    active environment:

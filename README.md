@@ -34,7 +34,7 @@ sudo weewx-php-ingest configure
 ```
 
 Driver settings, URL, and token are stored in `/etc/weewx-php-ingest/weewx.conf`.
-[Example configuration](examples/weewx.conf) Ã‚Â· [Multiple stations](examples/weewx-multi.conf)
+[Example configuration](examples/weewx.conf) · [Multiple stations](examples/weewx-multi.conf)
 
 ## Virtual stations
 
@@ -49,7 +49,7 @@ Select **RTL433** during setup. `rtl-433` is installed automatically.
 Each identified sensor appears as a separate station in PHP: **adopt, then map fields**.
 One USB receiver serves all its sensors. New sensors appear automatically.
 
-[Configuration and contract](docs/native-ingest-v3.md) Ã‚Â· [Example](examples/weewx-sdr.conf)
+[Configuration and contract](docs/native-ingest-v3.md) · [Example](examples/weewx-sdr.conf)
 
 ## GW1000 and WeatherFlow / Tempest
 
@@ -58,7 +58,7 @@ GW1000 discovers the gateway on your LAN or accepts its IPv4 address.
 WeatherFlow listens on UDP port 50222; the hub must be on the same LAN.
 Each detected sensor/device appears in PHP: **adopt, then map fields**.
 
-[Configuration example](examples/weewx-network.conf) Â· [Sensor handling and limits](docs/native-ingest-v3.md#gw1000-lan-sensors)
+[Configuration example](examples/weewx-network.conf) · [Sensor handling and limits](docs/native-ingest-v3.md#gw1000-lan-sensors)
 
 ## Hardware archive
 
@@ -72,7 +72,7 @@ to LOOP collection. Logger, upload and PHP archive intervals are independent. PH
 logger intervals, combines complete spans and exposes coarse history alongside
 finer gaps without inventing measurements.
 
-[Contract and recovery](docs/native-ingest-v2.md) Ã‚Â· [Request schema](schemas/weewx-v2.schema.json)
+[Contract and recovery](docs/native-ingest-v2.md) · [Request schema](schemas/weewx-v2.schema.json)
 
 ## Update
 
@@ -90,8 +90,8 @@ Also updates `rtl-433` from the configured OS repositories.
 The bundled WeeWX CLI supports `weectl extension install` with a GitHub ZIP/tarball
 URL. The package must be a WeeWX extension containing `install.py`.
 
-[Installation and configuration steps](docs/operations.md#treiber-von-github-installieren).
+[Installation and configuration steps](docs/operations.md#installing-drivers-from-github).
 Select additional drivers in `weewx.conf`; guided setup lists only bundled drivers.
 Third-party drivers are updated separately.
 
-[Operation and troubleshooting](docs/operations.md) Ã‚Â· [WeeWX license](THIRD_PARTY.md)
+[Operation and troubleshooting](docs/operations.md) · [WeeWX license](THIRD_PARTY.md)

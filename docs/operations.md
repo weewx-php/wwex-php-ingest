@@ -2,13 +2,13 @@
 
 ## Installation and service
 
-Direkt installieren; die geführte Einrichtung startet anschließend:
+Install directly; guided setup starts afterward:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/weewx-php/wwex-php-ingest/main/install.sh | sudo bash
 ```
 
-Alternativ aus einem Repository-Checkout: `sudo bash install.sh --source "$PWD"`.
+Alternatively, install from a repository checkout: `sudo bash install.sh --source "$PWD"`.
 The installer manages these paths:
 
 | Path | Contents |
@@ -23,20 +23,20 @@ The installer manages these paths:
 verifies all bundled driver files and checks configuration before stopping the
 service. Activation switches a symlink. If service startup fails, the previous
 release and service unit are restored. Existing configuration and queue contents
-are preserved. Das Repository ist öffentlich; Installation und Updates über HTTPS
-benötigen keine GitHub-Anmeldung.
+are preserved. The repository is public; installation and updates over HTTPS
+do not require a GitHub login.
 
-### Unbeaufsichtigte Installation
+### Unattended installation
 
-Mit `--non-interactive` wird die Einrichtung übersprungen:
+Use `--non-interactive` to skip setup:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/weewx-php/wwex-php-ingest/main/install.sh | sudo bash -s -- --non-interactive
 ```
 
-Bei einer neuen Installation bleibt der Dienst bis zur Einrichtung gestoppt.
+On a new installation, the service remains stopped until setup is complete.
 
-### Einrichtung und Diagnose
+### Setup and diagnostics
 
 For unattended installation, use `--non-interactive`. If no configuration exists,
 the installer generates the token and collector ID and leaves the service stopped.
@@ -93,27 +93,27 @@ files and configuration remain outside release directories. Use each extension's
 upstream instructions for its additional files and driver options. Local drivers,
 services, requirements and import paths are trusted administrator code.
 
-### Treiber von GitHub installieren
+### Installing drivers from GitHub
 
-Die mitgelieferte `weectl`-CLI liegt unter
-`/opt/weewx-php-ingest/current/.venv/bin/weectl`. Sie installiert
-[WeeWX-Erweiterungen](https://weewx.com/docs/latest/custom/extensions/)
-aus ZIP-/Tarball-URLs, lokalen Archiven oder Verzeichnissen. Verwende die
-Download-URL aus der Treiberanleitung; eine GitHub-Repository-Seite reicht nicht.
-Das Paket muss einen WeeWX-Installer (`install.py`) enthalten.
+The bundled `weectl` CLI is located at
+`/opt/weewx-php-ingest/current/.venv/bin/weectl`. It installs
+[WeeWX extensions](https://weewx.com/docs/latest/custom/extensions/)
+from ZIP/tarball URLs, local archives or directories. Use the download URL from
+the driver's instructions; a GitHub repository page is not sufficient.
+The package must include a WeeWX installer (`install.py`).
 
-1. Dienst stoppen und Konfiguration öffnen:
+1. Stop the service and open the configuration:
 
    ```sh
    sudo systemctl stop weewx-php-ingest
    sudoedit /etc/weewx-php-ingest/weewx.conf
    ```
 
-2. Die folgenden Werte auf oberster Ebene ergänzen, soweit sie fehlen.
-   `WEEWX_ROOT` und `USER_ROOT` stehen vor dem ersten Abschnitt.
-   Vorhandene Abschnitte erweitern, nicht doppelt anlegen. WeeWX benötigt
-   `StdReport` beim Zusammenführen von Erweiterungsoptionen; dadurch werden
-   keine Reports im Collector aktiviert.
+2. Add the following top-level values if missing.
+   Place `WEEWX_ROOT` and `USER_ROOT` before the first section.
+   Extend existing sections instead of duplicating them. WeeWX requires
+   `StdReport` when merging extension options; this does not enable reports
+   in the collector.
 
    ```ini
    WEEWX_ROOT = /var/lib/weewx-php-ingest
@@ -127,9 +127,9 @@ Das Paket muss einen WeeWX-Installer (`install.py`) enthalten.
        [[Services]]
    ```
 
-3. Paket installieren. `OWNER`, `REPO` und `VERSION` durch die Angaben des
-   Treibers ersetzen. Der Aufruf schützt die neu geschriebene Token-Konfiguration
-   und macht installierte Python-Dateien für den Dienst lesbar:
+3. Install the package. Replace `OWNER`, `REPO` and `VERSION` with the driver's
+   details. This command protects the newly written token configuration and
+   makes installed Python files readable by the service:
 
    ```sh
    sudo sh -c '
@@ -143,34 +143,34 @@ Das Paket muss einen WeeWX-Installer (`install.py`) enthalten.
    ' sh 'https://github.com/OWNER/REPO/archive/refs/tags/VERSION.zip'
    ```
 
-4. In der `weewx.conf` den Treiberabschnitt laut dessen Anleitung ergänzen und
-   unter `[Station]` den passenden `station_type` setzen. Beispiel mit Platzhaltern:
+4. Add the driver section to `weewx.conf` according to its instructions and set
+   the matching `station_type` under `[Station]`. Example with placeholders:
 
    ```ini
    [Station]
        station_type = DRIVER_NAME
-       # Vorhandene latitude, longitude und altitude beibehalten.
+       # Keep the existing latitude, longitude and altitude.
 
    [DRIVER_NAME]
        driver = user.DRIVER_MODULE
-       # Verbindungsoptionen laut Treiberanleitung.
+       # Connection options from the driver's instructions.
    ```
 
-   Bei mehreren Stationen gehören diese Einstellungen in die jeweilige
-   `[Stations]`-Untersektion. Von `weectl` ergänzte Treiberoptionen stehen zunächst
-   auf oberster Ebene und müssen dort übernommen werden. Der geführte Assistent
-   bietet derzeit nur die mitgelieferten Treiber an.
+   For multiple stations, place these settings in the corresponding `[Stations]`
+   subsection. Driver options added by `weectl` initially appear at the top
+   level and must be moved into that subsection. The guided assistant currently
+   offers only the bundled drivers.
 
-5. Zusätzliche Python-Abhängigkeiten laut Treiberanleitung in die root-eigene
-   `/etc/weewx-php-ingest/requirements.txt` eintragen. Falls erforderlich, mit
-   folgendem Befehl in die aktive Umgebung installieren (ein Update auf dieselbe
-   Collector-Version führt keine Neuinstallation aus):
+5. Add any additional Python dependencies from the driver's instructions to
+   the root-owned `/etc/weewx-php-ingest/requirements.txt`. If needed, install
+   them into the active environment with this command (updating to the same
+   collector version does not reinstall dependencies):
 
    ```sh
    sudo /opt/weewx-php-ingest/current/.venv/bin/python -m pip install -r /etc/weewx-php-ingest/requirements.txt
    ```
 
-   Danach prüfen und starten:
+   Then check and start:
 
    ```sh
    sudo -u weewx-ingest weewx-php-ingest check
@@ -178,13 +178,12 @@ Das Paket muss einen WeeWX-Installer (`install.py`) enthalten.
    sudo journalctl -u weewx-php-ingest -f
    ```
 
-   `check` prüft die Konfiguration; erst der laufende Dienst liest die Hardware.
+   `check` validates the configuration; only the running service reads hardware.
 
-Treiber unter `/var/lib/weewx-php-ingest/bin/user/` bleiben bei Collector-Updates
-erhalten. Ihre Version wird durch die WeeWX-Sync-Action nicht aktualisiert;
-verwende dafür die Update-Anleitung des jeweiligen Treibers. Erweiterungen mit
-zusätzlichen Diensten benötigen außerdem die unten beschriebene explizite
-`Ingest.Services`-Konfiguration.
+Drivers under `/var/lib/weewx-php-ingest/bin/user/` survive collector updates.
+The WeeWX sync action does not update their versions; follow each driver's
+update instructions. Extensions with additional services also require the
+explicit `Ingest.Services` configuration described below.
 
 ### Auxiliary services and Python environments
 
