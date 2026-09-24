@@ -8,7 +8,7 @@ version = "0.2.0"
 description = "Durable, isolated WeeWX collectors for the weewx-php native receiver"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = ["weewx==5.5.1", "configobj>=5.0.9,<6", "six>=1.17"]
+dependencies = ["weewx==5.5.2", "configobj>=5.0.9,<6", "six>=1.17"]
 
 [project.optional-dependencies]
 test = ["pytest>=8", "cryptography>=46", "ruff>=0.12", "pip-audit>=2.9", "build>=1.2", "requests>=2.32", "python-dateutil>=2.9", "pycryptodomex>=3.23", "six>=1.17"]
