@@ -1,12 +1,12 @@
 Metadata-Version: 2.4
 Name: weewx
-Version: 5.5.2
+Version: 5.6.0
 Summary: The WeeWX weather software system.
 License-Expression: GPL-3.0-only
 License-File: LICENSE.txt
 Author: Tom Keffer
 Author-email: tkeffer@gmail.com
-Requires-Python: >=3.7
+Requires-Python: >=3.6
 Classifier: Development Status :: 5 - Production/Stable
 Classifier: Intended Audience :: End Users/Desktop
 Classifier: Intended Audience :: Science/Research
@@ -14,6 +14,7 @@ Classifier: Operating System :: POSIX :: Linux
 Classifier: Operating System :: Unix
 Classifier: Operating System :: MacOS
 Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3.6
 Classifier: Programming Language :: Python :: 3.7
 Classifier: Programming Language :: Python :: 3.8
 Classifier: Programming Language :: Python :: 3.9
@@ -28,6 +29,7 @@ Requires-Dist: Pillow (>=5.2)
 Requires-Dist: PyMySQL (>=1.0)
 Requires-Dist: configobj (>=5.0)
 Requires-Dist: ephem (>=4.1)
+Requires-Dist: importlib-resources (>=3.3) ; python_version < "3.7"
 Requires-Dist: pyserial (>=3.4)
 Requires-Dist: pyusb (>=1.0.2)
 Project-URL: Documentation, https://weewx.com/docs
@@ -147,10 +149,10 @@ The code lives in a git repository:
 
 [https://github.com/weewx/weewx](https://github.com/weewx/weewx)
 
-See [Notes for WeeWX developers](https://weewx.com/docs/latest/devnotes/) to 
-learn about how to contribute to WeeWX. See the file 
-[PACKAGING.txt](PACKAGING.txt) for details about the process of creating a 
-release.
+If you wish to contribute to the project, please read the following:
+* [Notes for WeeWX developers](https://weewx.com/docs/latest/devnotes/) - detailed programming patterns and examples
+* [CONTRIBUTING.txt](CONTRIBUTING.txt) - basic information about the tools and processes for contributing code and documentation
+* [PACKAGING.txt](PACKAGING.txt) - details about the process of creating packages and releases
 
 ## Documentation and Support
 

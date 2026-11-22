@@ -1,5 +1,5 @@
 #
-#    Copyright (c) 2009-2024 Tom Keffer <tkeffer@gmail.com>
+#    Copyright (c) 2009-2026 Tom Keffer <tkeffer@gmail.com>
 #
 #    See the file LICENSE.txt for your full rights.
 #
@@ -21,15 +21,19 @@ import re
 import shutil
 import time
 from collections import ChainMap
+from contextlib import contextmanager
 
-# importlib.resources is 3.7 or later, importlib_resources is the backport
 try:
-    import importlib.resources as importlib_resources
-except:
     import importlib_resources
+except ImportError:
+    # Python 3.6 backport:
+    import importlib.resources as importlib_resources
 
 # For backwards compatibility:
-from weeutil.config import accumulateLeaves, search_up
+import weeutil.config
+
+accumulateLeaves = weeutil.config.accumulateLeaves
+search_up = weeutil.config.search_up
 
 
 def convertToFloat(seq):
@@ -230,18 +234,13 @@ def nominal_spans(label):
         7200
         >>> print(nominal_spans('120M'))
         7200
-        >>> print(nominal_spans(None))
-        None
 
     Args:
-        label(str|float|int|None): A time, possibly with a duration suffix.
+        label(str|float|int): A time, possibly with a duration suffix.
 
     Returns:
-        int|float|None:
+        int|float:
     """
-    if label is None:
-        return None
-
     if isinstance(label, str):
         label = duration_synonyms.get(label.lower(), label)
         if label.endswith('M'):
@@ -799,6 +798,7 @@ def stampgen(startstamp, stopstamp, interval):
     if interval == 365.25 / 12 * 24 * 3600:
         # Interval is a nominal month. This algorithm is
         # necessary because not all months have the same length.
+        start_day = dt.day
         while dt <= stop_dt:
             t_tuple = dt.timetuple()
             yield time.mktime(t_tuple)
@@ -808,7 +808,8 @@ def stampgen(startstamp, stopstamp, interval):
             if month > 12:
                 month -= 12
                 year += 1
-            dt = dt.replace(year=year, month=month)
+            day = min(start_day, calendar.monthrange(year, month)[1])
+            dt = dt.replace(year=year, month=month, day=day)
     else:
         # This rather complicated algorithm is necessary (rather than just
         # doing some time stamp arithmetic) because of the possibility that DST
@@ -893,6 +894,7 @@ def intervalgen(start_ts, stop_ts, interval):
     if interval == 365.25 / 12 * 24 * 3600:
         # Interval is a nominal month. This algorithm is
         # necessary because not all months have the same length.
+        start_day = dt1.day
         while dt1 < stop_dt:
             t_tuple = dt1.timetuple()
             year = t_tuple[0]
@@ -901,7 +903,8 @@ def intervalgen(start_ts, stop_ts, interval):
             if month > 12:
                 month -= 12
                 year += 1
-            dt2 = min(dt1.replace(year=year, month=month), stop_dt)
+            day = min(start_day, calendar.monthrange(year, month)[1])
+            dt2 = min(dt1.replace(year=year, month=month, day=day), stop_dt)
             stamp1 = time.mktime(t_tuple)
             stamp2 = time.mktime(dt2.timetuple())
             yield TimeSpan(stamp1, stamp2)
@@ -1062,6 +1065,22 @@ def genMonthSpans(start_ts, stop_ts):
 
 
 def genYearSpans(start_ts, stop_ts):
+    """
+    Generates year-long time spans between two given timestamps.
+
+    This function yields `TimeSpan` objects, each representing a full year
+    within the range specified by `start_ts` and `stop_ts`. If the `stop_ts`
+    timestamp corresponds to the exact start of a year (January 1, 00:00:00),
+    it adjusts to include only years prior to the `stop_ts`.
+
+    Args:
+        start_ts (int|float|None): Starting timestamp.
+        stop_ts (int|float|None): Stopping timestamp.
+
+    Yields:
+        TimeSpan: Representations of year-long intervals between `start_ts`
+        and `stop_ts`.
+    """
     if None in (start_ts, stop_ts):
         return
     _start_date = datetime.date.fromtimestamp(start_ts)
@@ -1715,6 +1734,17 @@ def max_with_none(x_seq):
     return xmax
 
 
+@contextmanager
+def set_cwd(new_cwd):
+    """Set the current working directory within a context manager"""
+    old_cwd = os.getcwd()
+    try:
+        os.chdir(new_cwd)
+        yield new_cwd
+    finally:
+        os.chdir(old_cwd)
+
+
 def move_with_timestamp(path):
     """Save a file or directory to a path with a timestamp."""
     # Sometimes the target has a trailing '/'. This will take care of it:
@@ -1833,7 +1863,12 @@ def deep_copy_path(path, dest_dir):
     """Copy a path to a destination, making any subdirectories along the way.
     The source path is relative to the current directory.
 
-    Returns the number of files copied
+    Args:
+        path(str): Path to source file or directory.
+        dest_dir(str): Destination directory.
+
+    Returns:
+        int: Number of files copied.
     """
 
     ncopy = 0
@@ -1849,10 +1884,18 @@ def deep_copy_path(path, dest_dir):
         d = os.path.dirname(os.path.join(dest_dir, path))
         # Make the destination directory:
         os.makedirs(d, exist_ok=True)
-        # This version of copy does not copy over modification time,
-        # so it will look like a new file, causing it to be (for
-        # example) ftp'd to the server:
-        shutil.copy(path, d)
+        dest_file = os.path.join(d, os.path.basename(path))
+        # Remove any existing destination file first in case it was previously
+        # copied from a read-only source (such as an immutable package store),
+        # which would otherwise cause open(dest_file, 'wb') to fail with
+        # PermissionError:
+        try:
+            os.unlink(dest_file)
+        except (FileNotFoundError, OSError):
+            pass
+        # copyfile copies contents without propagating read-only file permissions
+        # and without preserving mtime:
+        shutil.copyfile(path, dest_file)
         ncopy += 1
     return ncopy
 
@@ -1919,6 +1962,24 @@ def get_resource_fd(package, resource):
     else:
         # For later versions...
         return importlib_resources.files(package).joinpath(resource).open('r') # novermin
+
+
+def get_test_dir():
+    """Return a path to a unified directory for transient test files.
+
+    Checks WEEWX_TEST_DIR, then TMPDIR/weewx-test, then /var/tmp/weewx-test
+    (if writable), falling back to tempfile.gettempdir()/weewx-test.
+    """
+    import tempfile
+    test_dir = os.environ.get('WEEWX_TEST_DIR')
+    if not test_dir:
+        base = os.environ.get('TMPDIR') or (
+            '/var/tmp' if os.path.isdir('/var/tmp') and os.access('/var/tmp', os.W_OK)
+            else tempfile.gettempdir()
+        )
+        test_dir = os.path.join(base, 'weewx-test')
+    os.makedirs(test_dir, exist_ok=True)
+    return test_dir
 
 
 if __name__ == '__main__':
